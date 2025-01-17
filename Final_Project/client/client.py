@@ -9,6 +9,8 @@ import os
 import torch
 import pyaudio
 import threading
+import base64
+import json
 
 # --- Configuration ----------------------
 WAKE_WORD = "marvin"
@@ -96,31 +98,47 @@ class Client:
         self.socket.sendall(struct.pack("!I", len(packed_data)))
         self.socket.sendall(packed_data)
 
-    def _receive_audio(self, timeout=10):
+    def _receive_response(self, timeout=30):
         self.socket.settimeout(timeout)
         try:
-            data_size_bytes = self.socket.recv(4)
-            if not data_size_bytes:
+            # Receive the size of the JSON response
+            response_size_bytes = self.socket.recv(4)
+            if not response_size_bytes:
                 print("Connection closed by server.")
-                return None
-            data_size = struct.unpack("!I", data_size_bytes)[0]
+                return None, None
+            response_size = struct.unpack("!I", response_size_bytes)[0]
 
-            audio_data = b""
+            # Receive the JSON response
+            response_data = b""
             bytes_received = 0
-            while bytes_received < data_size:
-                chunk = self.socket.recv(min(4096, data_size - bytes_received))
+            while bytes_received < response_size:
+                chunk = self.socket.recv(min(4096, response_size - bytes_received))
                 if not chunk:
-                    print("Connection closed by server during audio reception.")
-                    return None
-                audio_data += chunk
+                    print("Connection closed by server during response reception.")
+                    return None, None
+                response_data += chunk
                 bytes_received += len(chunk)
 
-            audio_np = np.frombuffer(audio_data, dtype=np.float32)
-            print(f"Received audio_np.shape: {audio_np.shape}")  # Debug print
-            return audio_np
+            # Parse the JSON response
+            response_json = json.loads(response_data.decode())
+
+            # Decode the Base64 audio data
+            audio_base64 = response_json["audio"]
+            if audio_base64:
+                audio_data = np.frombuffer(base64.b64decode(audio_base64), dtype=np.float32)
+            else:
+                audio_data = None
+
+            next_state = response_json["next_state"]
+
+            return audio_data, next_state
+
         except socket.timeout:
-            print("Timeout occurred while waiting for audio data.")
-            return None
+            print("Timeout occurred while waiting for response data.")
+            return None, None
+        except json.JSONDecodeError as e:
+            print(f"Error decoding JSON response: {e}")
+            return None, None
         finally:
             self.socket.settimeout(None)
 
@@ -181,68 +199,60 @@ class Client:
 
     def _collect_audio_after_wake_word(self):
         print("Collecting audio after wake word...")
-        self.vad.audio_buffer = []
 
-        stream = self.p.open(
-            format=self.audio_params["format"],
-            channels=self.audio_params["channels"],
-            rate=self.audio_params["rate"],
-            input=True,
-            frames_per_buffer=self.audio_params["chunk_size"],
-        )
+        while True:  # Main loop for collecting audio and handling responses
+            self.vad.audio_buffer = []
+            stream = self.p.open(
+                format=self.audio_params["format"],
+                channels=self.audio_params["channels"],
+                rate=self.audio_params["rate"],
+                input=True,
+                frames_per_buffer=self.audio_params["chunk_size"] * 2,
+            )
 
-        while True:  # Continuously collect audio until speech end
-            data = stream.read(self.audio_params["chunk_size"])
-            audio_chunk = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
+            speech_ended = False
+            while not speech_ended:
+                data = stream.read(self.audio_params["chunk_size"])
+                audio_chunk = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
+                speech_end, audio_frames = self.vad.process_audio_frame(audio_chunk)
 
-            speech_end, audio_frames = self.vad.process_audio_frame(audio_chunk)
-            if audio_frames:
-                if DEBUG:
-                    self._save_audio_to_file(audio_frames, filename="wake_word_audio.wav")
+                if audio_frames:
+                    if DEBUG:
+                        self._save_audio_to_file(audio_frames, filename="wake_word_audio.wav")
 
-                audio_to_send = audio_frames
-                if audio_to_send:
-                    audio_data_np = np.concatenate(audio_to_send, axis=0)
-                    self._send_audio(audio_data_np)
-                    print("Audio sent to server. Waiting for response...")
+                    audio_to_send = audio_frames
+                    if audio_to_send:
+                        audio_data_np = np.concatenate(audio_to_send, axis=0)
+                        self._send_audio(audio_data_np)
+                        print("Audio sent to server. Waiting for response...")
 
-                    response_audio = self._receive_audio()
-                    if response_audio is not None:
-                        print(f"response_audio: {response_audio}")
-                        print(f"response_audio.shape: {response_audio.shape}")
-                        print(f"response_audio.dtype: {response_audio.dtype}")
-                        if DEBUG:
-                            self._save_audio_to_file(
-                                response_audio,
-                                filename="response_audio.wav",
-                            )
-                        self._play_audio(response_audio)
-                        print("Response received and played.")
-                        self._close_with_timeout(stream)
-                        return
+                        response_audio, next_state = self._receive_response()
+                        if response_audio is not None:
+                            print(f"response_audio: {response_audio}")
+                            print(f"response_audio.shape: {response_audio.shape}")
+                            print(f"response_audio.dtype: {response_audio.dtype}")
+                            if DEBUG:
+                                self._save_audio_to_file(
+                                    response_audio,
+                                    filename="response_audio.wav",
+                                )
+                            self._play_audio(response_audio)
+                            print(f"Response received and played. Next state: {next_state}")
 
-            if speech_end == False:
-                print("Speech ended, sending audio...")
-                audio_to_send = np.concatenate(audio_frames) # Concatenate to send
-                if audio_to_send.size > 0:
-                    audio_data_np = audio_to_send
-                    self._send_audio(audio_data_np)
-                    print("Audio sent to server. Waiting for response...")
+                            self._close_with_timeout(stream)
 
-                    response_audio = self._receive_audio()
-                    if response_audio is not None:
-                        print(f"response_audio: {response_audio}")
-                        print(f"response_audio.shape: {response_audio.shape}")
-                        print(f"response_audio.dtype: {response_audio.dtype}")
-                        if DEBUG:
-                            self._save_audio_to_file(
-                                response_audio,
-                                filename="response_audio.wav",
-                            )
-                        self._play_audio(response_audio)
-                        print("Response received and played.")
-                        self._close_with_timeout(stream)
-                        return
+                            if next_state == "WAKEWORD":
+                                return  # Go back to wake word detection
+                            elif next_state == "VAD":
+                                time.sleep(2)
+                                speech_ended = True # Go to the beginning of the main loop
+                                break
+                            else:
+                                print("Error: Unknown next state received.")
+                                return
+                        else:
+                            self._close_with_timeout(stream)
+                            return
 
     def run(self):
         self._connect_to_server()
