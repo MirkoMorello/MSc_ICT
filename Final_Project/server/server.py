@@ -7,7 +7,7 @@ from typing import Tuple, List, Optional
 from dataclasses import dataclass
 import sys
 import os
-import json  # Import the json module
+import json 
 import base64
 
 sys.path.append(os.path.abspath("../datasets/Kokoro-82M"))
@@ -15,16 +15,16 @@ from models import build_model
 from kokoro import generate
 from dotenv import load_dotenv
 
-load_dotenv()  # Load environment variables from .env file
+load_dotenv()  # load environment variables
 
 # --- Configuration ---
-SERVER_IP = "127.0.0.1"  # Replace with the server's IP address if necessary
+SERVER_IP = "127.0.0.1"
 SERVER_PORT = 8080
 SAMPLE_RATE = 24000  # Kokoro uses 24kHz audio
 DEBUG = False
-MODEL_PATH = "../datasets/Kokoro-82M/kokoro-v0_19.pth"  # Update with the correct path
+MODEL_PATH = "../datasets/Kokoro-82M/kokoro-v0_19.pth"
 VOICE_PATH = "../datasets/Kokoro-82M/voices/af.pt"
-VOICE_NAME = "af"  # You can change this if using another voice
+VOICE_NAME = "af"  
 
 # --- LLM Agent ---
 @dataclass
@@ -46,36 +46,43 @@ class MistralConversationHandler:
         self.conversation = ConversationState(context=[])
 
     def _build_prompt(self, user_input: str) -> str:
-        history = ""
+        """Constructs a prompt that encourages natural conversation."""
+        system_prompt = "You are a helpful and friendly AI assistant. Engage in a natural conversation with the user, providing informative and relevant responses. The conversation history is provided below. Try to infer if the user wants to end the conversation and only answer if you are sure."
+        
+        conversation_history = ""
         for entry in self.conversation.context[-5:]:
-            role = "User" if entry["role"] == "user" else "Assistant"
-            history += f"{role}: {entry['content']}\n"
+          if entry["role"] == "user":
+            conversation_history += f"User: {entry['content']}\n"
+          else:
+            conversation_history += f"Assistant: {entry['content']}\n"
 
-        prompt = f"""{history}
-User: {user_input}
+        # Build the final prompt
+        prompt = f"""<s>[INST] {system_prompt}
 
-Consider if the user wants to end the conversation, and print it like this: PROBABILITY: [value]
-Then, proceed with your response:"""
+Conversation History:
+{conversation_history}
+
+Current User Input:
+{user_input} [/INST]
+"""
         return prompt
 
-    def _parse_response(self, full_response: str) -> Tuple[str, float]:
-        try:
-            # Extract probability
-            prob_start = full_response.find("PROBABILITY:")
-            if prob_start == -1:
-                return full_response, 0.0  # Return 0.0 if PROBABILITY is not found
-            prob_end = full_response.find("\n", prob_start)
-            prob_str = full_response[prob_start + len("PROBABILITY:"):prob_end].strip()
-            probability = float(prob_str)
+    def _parse_response(self, full_response: str, user_input: str) -> Tuple[str, float]:
+        """Parses the LLM's full response to extract the response text and probability of ending the conversation."""
 
-            # Extract response text
-            response_text = full_response[prob_end + 1:].strip()
-            # Remove also everything previous to "Your response:" to avoid leaking the prompt
-            response_text = response_text[response_text.find("Your response:") + len("Your response:"):].strip()
-            return response_text, probability
-        except Exception as e:
-            print(f"Error parsing response: {e}")
-            return full_response, 0.0
+        # The response is everything after [/INST]
+        response_text = full_response.split("[/INST]")[-1].strip()
+
+        if response_text.startswith("Assistant:"):
+            response_text = response_text[len("Assistant:"):].strip()
+
+        # Heuristic to determine if the user wants to end the conversation
+        end_conversation_keywords = ["bye", "goodbye", "stop", "end"]
+        probability = 0.0
+        if any(keyword in user_input.lower() for keyword in end_conversation_keywords):
+            probability = 0.8  # High probability if user input contains end keywords
+
+        return response_text, probability
 
     def generate_response(
         self, input_text: str, max_new_tokens: int = 512
@@ -92,15 +99,14 @@ Then, proceed with your response:"""
                 pad_token_id=self.tokenizer.eos_token_id,
             )
         full_response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        response_text, probability = self._parse_response(full_response)
+        response_text, probability = self._parse_response(full_response, input_text)
         return response_text, probability
 
     def process_input(self, text: str) -> Tuple[str, bool]:
         self.conversation.context.append({"role": "user", "content": text})
         response, probability = self.generate_response(text)
         self.conversation.context.append({"role": "assistant", "content": response})
-        should_end = probability > 0.5
-        return response, should_end, probability
+        return response, probability
 
 # --- Server Class ---
 class Server:
@@ -110,11 +116,12 @@ class Server:
         self.server_socket = None
         self.client_socket = None
         self.client_address = None
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.stt_pipeline = pipeline(
-            "automatic-speech-recognition", model="openai/whisper-tiny"
+            "automatic-speech-recognition", model="openai/whisper-medium",
+            device = self.device
         )
         self.llm_handler = MistralConversationHandler()
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.tts_model = build_model(MODEL_PATH, self.device)
         self.voice = torch.load(VOICE_PATH, weights_only=True).to(self.device)
 
@@ -168,9 +175,9 @@ class Server:
 
     def _interact_with_llm(self, text):
         print("Interacting with LLM...")
-        response, should_end, probability = self.llm_handler.process_input(text)
-        print(f"LLM response: {response}")
-        return response, should_end, probability
+        response, probability = self.llm_handler.process_input(text)
+        print(f"LLM response------------------\n{response}\n------------------")
+        return response, probability
 
     def _generate_tts(self, text):
         print("Generating TTS audio with Kokoro...")
@@ -188,7 +195,7 @@ class Server:
 
     def _send_response(self, audio_data, next_state):
         if audio_data is not None:
-            audio_base64 = base64.b64encode(audio_data.tobytes()).decode('utf-8')  # Encode to Base64
+            audio_base64 = base64.b64encode(audio_data.tobytes()).decode('utf-8')
         else:
             audio_base64 = ""
 
@@ -198,6 +205,9 @@ class Server:
         }
         response_json = json.dumps(response_data)
         response_size = len(response_json)
+
+        if DEBUG:
+            print(f"Sending response_size: {response_size} bytes")
 
         # Send the size of the JSON response
         self.client_socket.sendall(struct.pack("!I", response_size))
@@ -218,7 +228,7 @@ class Server:
                         break  # Client disconnected
 
                     text = self._perform_stt(audio_data)
-                    response, should_end, probability = self._interact_with_llm(text)
+                    response, probability = self._interact_with_llm(text)
 
                     # Determine the next state based on probability
                     if probability > 0.5:
