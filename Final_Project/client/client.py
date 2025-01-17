@@ -20,14 +20,15 @@ DEBUG = True
 # -----------------------------------------
 
 class VoiceActivityDetector:
-    def __init__(self, frame_duration_ms=20, threshold=50, smoothing_factor=0.8):
+    def __init__(self, frame_duration_ms=20, threshold=10, smoothing_factor=0.8):
         self.frame_duration_ms = frame_duration_ms
         self.threshold = threshold
         self.smoothing_factor = smoothing_factor
         self.audio_buffer = []
         self.num_silent_frames = 0
         self.sample_rate = None
-        self.smoothed_energy = 0  # Initialize smoothed energy
+        self.smoothed_energy = 0
+        self.voiced_frames_detected = False  # Flag to track if any voiced frames have been detected
 
     def set_sample_rate(self, sample_rate):
         self.sample_rate = sample_rate
@@ -46,6 +47,7 @@ class VoiceActivityDetector:
 
         if self.smoothed_energy > self.threshold:
             self.num_silent_frames = 0
+            self.voiced_frames_detected = True 
         else:
             self.num_silent_frames += 1
 
@@ -54,15 +56,23 @@ class VoiceActivityDetector:
 
         self.audio_buffer.append(frame)
 
-        # Speech end detection: 5 continuous silent frames
-        if self.num_silent_frames >= 5:
+        # Speech end detection logic
+        if self.voiced_frames_detected:
+            # Standard speech end detection after at least one voiced frame
+            is_speech_ended = self.num_silent_frames >= 5
+        else:
+            # Extended silence period if no voiced frames have been detected yet
+            is_speech_ended = self.num_silent_frames >= 25
+
+        if is_speech_ended:
             print("Speech ended")
             audio_to_send = self.audio_buffer
             self.audio_buffer = []
             self.num_silent_frames = 0
+            self.voiced_frames_detected = False  # Reset the flag
             return False, audio_to_send  # Signal speech end
-
-        return True, []  # Always continue recording
+        else:
+            return True, []  # Continue recording
 
 class Client:
     def __init__(self, server_ip, server_port, audio_params):
@@ -146,7 +156,7 @@ class Client:
         # Normalize audio data
         audio_data_normalized = audio_data / np.max(np.abs(audio_data)) if np.max(np.abs(audio_data)) > 0 else audio_data
 
-        # Ensure the audio data is a 1D array
+        # Audio data is a 1D array
         if audio_data_normalized.ndim > 1:
             print("Warning: Audio data has more than one dimension. Flattening to 1D array.")
             audio_data_normalized = audio_data_normalized.flatten()
@@ -244,7 +254,6 @@ class Client:
                             if next_state == "WAKEWORD":
                                 return  # Go back to wake word detection
                             elif next_state == "VAD":
-                                time.sleep(2)
                                 speech_ended = True # Go to the beginning of the main loop
                                 break
                             else:
@@ -316,7 +325,7 @@ if __name__ == "__main__":
     audio_params = {
         "format": pyaudio.paInt16,
         "channels": 1,
-        "rate": 24000,  # Make sure this is the same as the server's sample rate
+        "rate": 24000,  
         "chunk_size": int(16000 * 0.5),
         "threshold": 100,
     }
