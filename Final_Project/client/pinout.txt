@@ -1,0 +1,13 @@
+The following file contains the pinout used for connecting the SiPeed field microphones array to the Raspberry Pi. The the hardware point of view, the mics needs to be connected this way:
+
+LED_CK ---> GPIO 14 (PIN 23)
+LED_DA ---> GPIO 12 (PIN 19)
+MIC_D0 ---> GPIO 29 (PIN 40)
+MIC_D1 ---> GPIO 28 (PIN 38)
+MIC_D2 ---> GPIO 25 (PIN 37)
+MIC_D3 ---> GPIO 27 (PIN 36)
+MIC_WS ---> GPIO 24 (PIN 25)
+MIC_CK ---> GPIO 1 (PIN 12)
+VIN ------> 3.3VDC (PIN 1)
+GND ------> GROUND (PIN 6)
+
