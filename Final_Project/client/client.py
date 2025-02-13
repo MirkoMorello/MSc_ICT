@@ -59,7 +59,7 @@ class VoiceActivityDetector:
         # Speech end detection logic
         if self.voiced_frames_detected:
             # Standard speech end detection after at least one voiced frame
-            is_speech_ended = self.num_silent_frames >= 5
+            is_speech_ended = self.num_silent_frames >= 10
         else:
             # Extended silence period if no voiced frames have been detected yet
             is_speech_ended = self.num_silent_frames >= 25
@@ -67,12 +67,15 @@ class VoiceActivityDetector:
         if is_speech_ended:
             print("Speech ended")
             audio_to_send = self.audio_buffer
+            # Capture whether any voiced frames were detected during this segment
+            had_voiced = self.voiced_frames_detected
             self.audio_buffer = []
             self.num_silent_frames = 0
             self.voiced_frames_detected = False  # Reset the flag
-            return False, audio_to_send  # Signal speech end
+            # Return an extra flag (had_voiced) along with the speech end signal and audio buffer.
+            return False, audio_to_send, had_voiced  
         else:
-            return True, []  # Continue recording
+            return True, [], None  # Continue recording
 
 class Client:
     def __init__(self, server_ip, server_port, audio_params):
@@ -224,9 +227,17 @@ class Client:
             while not speech_ended:
                 data = stream.read(self.audio_params["chunk_size"])
                 audio_chunk = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
-                speech_end, audio_frames = self.vad.process_audio_frame(audio_chunk)
+                
+                # Unpack the extra flag from the VAD output
+                speech_continue, audio_frames, had_voiced = self.vad.process_audio_frame(audio_chunk)
 
                 if audio_frames:
+                    # If only silence was detected, skip sending audio and return to wake word detection
+                    if not had_voiced:
+                        print("Only silence detected. Returning to wake word detection.")
+                        self._close_with_timeout(stream)
+                        return
+
                     if DEBUG:
                         self._save_audio_to_file(audio_frames, filename="wake_word_audio.wav")
 
@@ -254,7 +265,7 @@ class Client:
                             if next_state == "WAKEWORD":
                                 return  # Go back to wake word detection
                             elif next_state == "VAD":
-                                speech_ended = True # Go to the beginning of the main loop
+                                speech_ended = True  # Go to the beginning of the main loop
                                 break
                             else:
                                 print("Error: Unknown next state received.")
