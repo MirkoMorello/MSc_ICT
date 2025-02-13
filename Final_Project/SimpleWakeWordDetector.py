@@ -7,5 +7,5 @@ class SimpleWakeWordDetector:
 
     def process_audio(self, audio_data):
         text = audio_data.lower()
-        print(f"Heard: {text}")  # Debugging print
+        print(f"Heard: {text}")  
         return self.wake_word in text
