@@ -8,7 +8,7 @@ import numpy as np
 import os
 
 load_dotenv()
-SAMPLE_RATE = 16000
+SAMPLE_RATE = 24000
 
 def get_embedding_model(auth_token):
     """Loads the embedding model from pyannote."""
