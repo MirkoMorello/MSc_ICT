@@ -21,8 +21,8 @@ class Rainbow(BaseSequence):
         """Draw rainbow that uniformly distributes itself across all pixels."""
         while semaphore.is_keep_going():
             for j in range(256):
-		if not semaphore.is_keep_going():
-		    break
+                if not semaphore.is_keep_going(): 
+                    break
                 led_data = []
                 for i in range(self.get_led_count()):
                     color = self.__wheel((int(i * 256 / self.get_led_count()) + j) & 255)

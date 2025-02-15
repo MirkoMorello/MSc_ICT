@@ -31,6 +31,7 @@ class BaseSequence(ABC):
         self.__semaphore = self.Semaphore()
 
     def __del__(self):
+        self.turn_off_leds()
         self.spi.close()
     
     def get_led_count(self):
