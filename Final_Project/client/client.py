@@ -2,6 +2,7 @@ import socket
 import simpleaudio as sa
 import numpy as np
 import struct
+import os
 import wave
 import torch
 import pyaudio
@@ -10,18 +11,51 @@ import base64
 import json
 import queue
 from wake_word_model import get_model
-from led_sequences.fixed import Fixed
-from led_sequences.rainbow_rotation import Rainbow
-from led_sequences.colors import Colors
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+SERVER_ADDRESS = os.getenv("SERVER_ADDRESS", "localhost")
+SERVER_PORT = int(os.getenv("SERVER_PORT", 12345))
+
+try:
+    from led_sequences.fixed import Fixed
+    from led_sequences.rainbow_rotation import Rainbow
+    from led_sequences.colors import Colors
+    LED_AVAILABLE = True
+except ImportError:
+    LED_AVAILABLE = False
+
+    # Define dummy classes with the same interface
+    class Fixed:
+        def __init__(self, *args, **kwargs):
+            pass
+        def start_sequence(self):
+            pass
+        def stop_sequence(self):
+            pass
+
+    class Rainbow:
+        def __init__(self, *args, **kwargs):
+            pass
+        def start_sequence(self):
+            pass
+        def stop_sequence(self):
+            pass
+
+    class Colors:
+        BLUE = None  # or a dummy value
+
 
 # --- Configuration ----------------------
 WAKE_WORD = "marvin"
-PROBABILITY_THRESHOLD = 0.4  # Confidence threshold
+PROBABILITY_THRESHOLD = 0.99  # Confidence threshold
 DEBUG = True
 # -----------------------------------------
 
 class VoiceActivityDetector:
-    def __init__(self, frame_duration_ms=20, threshold=400, smoothing_factor=0.8):
+    def __init__(self, frame_duration_ms=20, threshold=200, smoothing_factor=0.8):
         self.frame_duration_ms = frame_duration_ms
         self.threshold = threshold
         self.smoothing_factor = smoothing_factor
@@ -59,9 +93,9 @@ class VoiceActivityDetector:
         self.audio_buffer.append(frame)
 
         if self.voiced_frames_detected:
-            is_speech_ended = self.num_silent_frames >= 10
+            is_speech_ended = self.num_silent_frames >= 7
         else:
-            is_speech_ended = self.num_silent_frames >= 25
+            is_speech_ended = self.num_silent_frames >= 18
 
         if is_speech_ended:
             print("Speech ended")
@@ -182,8 +216,8 @@ class Client:
         if audio_data_normalized.ndim > 1:
             print("Warning: >1 dimension. Flattening.")
             audio_data_normalized = audio_data_normalized.flatten()
-        audio_data_int16 = (audio_data_normalized * 32767).astype(np.int16)
-        play_obj = sa.play_buffer(audio_data_int16, 1, 2, self.audio_params["rate"])
+        audio_data_int16 = (audio_data_normalized * 32767).astype(np.int16) 
+        play_obj = sa.play_buffer(audio_data_int16, 1, 2, 24000)
         play_obj.wait_done()
 
     def _save_audio_to_file(self, frames, filename="user_speech.wav"):
@@ -354,7 +388,7 @@ if __name__ == "__main__":
         "threshold": 400,  # Start high, adjust
     }
 
-    model = get_model()
+    model = get_model(path = "../best_model.pth")
     if model is None:
         print("Error: Model loading failed.")
         exit()
@@ -367,8 +401,8 @@ if __name__ == "__main__":
     ]
 
     client = Client(
-        server_ip="192.168.1.2",  #  your server's IP
-        server_port=8080,
+        server_ip=SERVER_ADDRESS,  #  your server's IP
+        server_port=SERVER_PORT,
         audio_params=audio_params,
         model=model,
         labels=labels,
