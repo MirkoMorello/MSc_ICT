@@ -1,7 +1,7 @@
 import torch
 import wave
 import numpy as np
-from wake_word_model import get_model  # Your model loading function
+from Final_Project.client.utils import get_model  # Your model loading function
 from torchinfo import summary
 
 def test_model_with_wav(wav_filepath, model_path="path/to/your/traced_model.pt", labels=None):

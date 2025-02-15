@@ -1,4 +1,4 @@
-from EncDecClassificationModel import EncDecClassificationModel
+from Final_Project.client.models import EncDecClassificationModel
 import torch
 
 def get_model(path): 
