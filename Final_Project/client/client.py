@@ -385,7 +385,7 @@ if __name__ == "__main__":
         "channels": 1,
         "rate": 16000,
         "chunk_size": int(16000 * 0.5),  # 0.5 seconds
-        "threshold": 400,  # Start high, adjust
+        "threshold": 100,  # Start high, adjust
     }
 
     model = get_model(path = "../best_model.pth")
