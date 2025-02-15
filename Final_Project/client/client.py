@@ -10,7 +10,7 @@ import threading
 import base64
 import json
 import queue
-from Final_Project.client.utils import get_model
+from utils import get_model
 from dotenv import load_dotenv
 
 # Load environment variables
