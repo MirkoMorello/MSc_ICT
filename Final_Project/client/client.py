@@ -21,7 +21,7 @@ SERVER_PORT = int(os.getenv("SERVER_PORT", 12345))
 
 try:
     from led_sequences.fixed import Fixed
-    from led_sequences.rainbow_rotation import Rainbow
+    from led_sequences.rainbow import Rainbow
     from led_sequences.colors import Colors
     LED_AVAILABLE = True
 except ImportError:
@@ -45,7 +45,7 @@ except ImportError:
             pass
 
     class Colors:
-        BLUE = None  # or a dummy value
+        BLUE = None
 
 
 # --- Configuration ----------------------
@@ -55,7 +55,7 @@ DEBUG = True
 # -----------------------------------------
 
 class VoiceActivityDetector:
-    def __init__(self, frame_duration_ms=20, threshold=200, smoothing_factor=0.8):
+    def __init__(self, frame_duration_ms=20, threshold=60, smoothing_factor=0.8):
         self.frame_duration_ms = frame_duration_ms
         self.threshold = threshold
         self.smoothing_factor = smoothing_factor
