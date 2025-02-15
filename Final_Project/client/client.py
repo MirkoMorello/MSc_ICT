@@ -1,26 +1,27 @@
-from transformers import pipeline
 import socket
 import simpleaudio as sa
 import numpy as np
 import struct
 import wave
-import time
-import os
 import torch
 import pyaudio
 import threading
 import base64
 import json
+import queue
+from wake_word_model import get_model
+from led_sequences.fixed import Fixed
+from led_sequences.rainbow_rotation import Rainbow
+from led_sequences.colors import Colors
 
 # --- Configuration ----------------------
 WAKE_WORD = "marvin"
-PROB_THRESHOLD = 0.8
-CHUNK_LENGTH_S = 2.0  # Audio chunk length for processing (in seconds)
+PROBABILITY_THRESHOLD = 0.4  # Confidence threshold
 DEBUG = True
 # -----------------------------------------
 
 class VoiceActivityDetector:
-    def __init__(self, frame_duration_ms=20, threshold=10, smoothing_factor=0.8):
+    def __init__(self, frame_duration_ms=20, threshold=400, smoothing_factor=0.8):
         self.frame_duration_ms = frame_duration_ms
         self.threshold = threshold
         self.smoothing_factor = smoothing_factor
@@ -28,306 +29,318 @@ class VoiceActivityDetector:
         self.num_silent_frames = 0
         self.sample_rate = None
         self.smoothed_energy = 0
-        self.voiced_frames_detected = False  # Flag to track if any voiced frames have been detected
+        self.voiced_frames_detected = False
 
     def set_sample_rate(self, sample_rate):
         self.sample_rate = sample_rate
 
     def process_audio_frame(self, frame):
         if self.sample_rate is None:
-            raise ValueError("Sample rate not set. Call set_sample_rate before processing audio.")
+            raise ValueError("Sample rate not set. Call set_sample_rate().")
 
-        frame_int16 = (frame * 32767).astype(np.int16)
-        energy = np.mean(np.abs(frame_int16))
+        energy = np.mean(np.abs(frame))
 
-        # Energy smoothing
         self.smoothed_energy = (
-            self.smoothing_factor * self.smoothed_energy + (1 - self.smoothing_factor) * energy
+            self.smoothing_factor * self.smoothed_energy
+            + (1 - self.smoothing_factor) * energy
         )
 
         if self.smoothed_energy > self.threshold:
             self.num_silent_frames = 0
-            self.voiced_frames_detected = True 
+            self.voiced_frames_detected = True
         else:
             self.num_silent_frames += 1
 
         if DEBUG:
-            print(f"Energy: {energy}, Smoothed Energy: {self.smoothed_energy:.2f}, Silent frames: {self.num_silent_frames}")
+            print(
+                f"Energy: {energy}, Smoothed Energy: {self.smoothed_energy:.2f}, Silent: {self.num_silent_frames}"
+            )
 
         self.audio_buffer.append(frame)
 
-        # Speech end detection logic
         if self.voiced_frames_detected:
-            # Standard speech end detection after at least one voiced frame
             is_speech_ended = self.num_silent_frames >= 10
         else:
-            # Extended silence period if no voiced frames have been detected yet
             is_speech_ended = self.num_silent_frames >= 25
 
         if is_speech_ended:
             print("Speech ended")
             audio_to_send = self.audio_buffer
-            # Capture whether any voiced frames were detected during this segment
             had_voiced = self.voiced_frames_detected
             self.audio_buffer = []
             self.num_silent_frames = 0
-            self.voiced_frames_detected = False  # Reset the flag
-            # Return an extra flag (had_voiced) along with the speech end signal and audio buffer.
-            return False, audio_to_send, had_voiced  
+            self.voiced_frames_detected = False
+            return False, audio_to_send, had_voiced
         else:
-            return True, [], None  # Continue recording
+            return True, [], None
 
 class Client:
-    def __init__(self, server_ip, server_port, audio_params):
+    def __init__(self, server_ip, server_port, audio_params, model, labels):
         self.server_ip = server_ip
         self.server_port = server_port
         self.audio_params = audio_params
         self.vad = VoiceActivityDetector(threshold=audio_params["threshold"])
         self.socket = None
-        self.wake_word_detector = pipeline(
-            "audio-classification",
-            model="MIT/ast-finetuned-speech-commands-v2",
-            device=0 if torch.cuda.is_available() else -1,
-        )
-        if WAKE_WORD not in self.wake_word_detector.model.config.label2id.keys():
-            raise ValueError(
-                f"Wake word {WAKE_WORD} not in set of valid class labels, pick a wake word in the set {self.wake_word_detector.model.config.label2id.keys()}."
-            )
+        self.model = model
+        self.model.eval()
         self.vad.set_sample_rate(self.audio_params["rate"])
         self.p = pyaudio.PyAudio()
         self.stream = None
+        self.wake_word_detected = False
+        self.labels = labels
+        self.overlap_buffer = torch.tensor([], dtype=torch.float32)
+        self.overlap_samples = int(self.audio_params["rate"] * 0.25)
+        self.previous_chunk = None  # Store the previous chunk
+        self.led_wake_word = Fixed(Colors.BLUE) 
+        self.led_waiting_wake_word = Rainbow()
 
     def _connect_to_server(self):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.connect((self.server_ip, self.server_port))
+        try:
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.settimeout(10)
+            self.socket.connect((self.server_ip, self.server_port))
+            self.socket.settimeout(None)
+            print("Connected to server.")
+        except socket.error as e:
+            print(f"Cannot connect: {e}")
+            self.socket = None
+        except Exception as e:
+             print(f"Unexpected error: {e}")
+             self.socket = None
 
     def _disconnect_from_server(self):
         if self.socket:
             self.socket.close()
+            self.socket = None
 
     def _send_audio(self, audio_data):
-        audio_data_float32 = np.array(audio_data).astype(np.float32)
-        packed_data = audio_data_float32.tobytes()
-        self.socket.sendall(struct.pack("!I", len(packed_data)))
-        self.socket.sendall(packed_data)
+        if self.socket is None:
+            print("Not connected to server. Cannot send audio.")
+            return
+        try:
+            audio_data_float32 = np.concatenate(audio_data).astype(np.float32) / 32768.0
+            packed_data = audio_data_float32.tobytes()
+            self.socket.sendall(struct.pack("!I", len(packed_data)))
+            self.socket.sendall(packed_data)
+        except socket.error as e:
+            print(f"Socket error during send: {e}")
+            self._disconnect_from_server()
+        except Exception as e:
+            print(f"Unexpected error during send: {e}")
+            self._disconnect_from_server()
 
     def _receive_response(self, timeout=30):
+        if self.socket is None:
+            print("Not connected to server. Cannot receive.")
+            return None, None
         self.socket.settimeout(timeout)
         try:
-            # Receive the size of the JSON response
             response_size_bytes = self.socket.recv(4)
             if not response_size_bytes:
-                print("Connection closed by server.")
+                print("Connection closed.")
                 return None, None
-            response_size = struct.unpack("!I", response_size_bytes)[0]
 
-            # Receive the JSON response
+            response_size = struct.unpack("!I", response_size_bytes)[0]
             response_data = b""
             bytes_received = 0
             while bytes_received < response_size:
                 chunk = self.socket.recv(min(4096, response_size - bytes_received))
                 if not chunk:
-                    print("Connection closed by server during response reception.")
+                    print("Connection closed during response.")
                     return None, None
                 response_data += chunk
                 bytes_received += len(chunk)
 
-            # Parse the JSON response
             response_json = json.loads(response_data.decode())
-
-            # Decode the Base64 audio data
             audio_base64 = response_json["audio"]
             if audio_base64:
                 audio_data = np.frombuffer(base64.b64decode(audio_base64), dtype=np.float32)
             else:
                 audio_data = None
-
             next_state = response_json["next_state"]
-
             return audio_data, next_state
 
         except socket.timeout:
-            print("Timeout occurred while waiting for response data.")
+            print("Timeout.")
             return None, None
-        except json.JSONDecodeError as e:
-            print(f"Error decoding JSON response: {e}")
+        except (json.JSONDecodeError, struct.error) as e:
+            print(f"JSON or struct error: {e}")
+            return None, None
+        except socket.error as e:
+            print(f"Socket error: {e}")
+            self._disconnect_from_server()
             return None, None
         finally:
             self.socket.settimeout(None)
 
     def _play_audio(self, audio_data):
-        # Normalize audio data
-        audio_data_normalized = audio_data / np.max(np.abs(audio_data)) if np.max(np.abs(audio_data)) > 0 else audio_data
-
-        # Audio data is a 1D array
-        if audio_data_normalized.ndim > 1:
-            print("Warning: Audio data has more than one dimension. Flattening to 1D array.")
-            audio_data_normalized = audio_data_normalized.flatten()
-
-        # Convert to int16 for playback
-        audio_data_int16 = (audio_data_normalized * 32767).astype(np.int16)
-
-        # Start playback
-        play_obj = sa.play_buffer(
-            audio_data_int16,
-            num_channels=1,
-            bytes_per_sample=2,
-            sample_rate=self.audio_params["rate"],
+        audio_data_normalized = (
+            audio_data / np.max(np.abs(audio_data))
+            if np.max(np.abs(audio_data)) > 0
+            else audio_data
         )
+        if audio_data_normalized.ndim > 1:
+            print("Warning: >1 dimension. Flattening.")
+            audio_data_normalized = audio_data_normalized.flatten()
+        audio_data_int16 = (audio_data_normalized * 32767).astype(np.int16)
+        play_obj = sa.play_buffer(audio_data_int16, 1, 2, self.audio_params["rate"])
         play_obj.wait_done()
 
     def _save_audio_to_file(self, frames, filename="user_speech.wav"):
         if isinstance(frames, list):
-            # Concatenate list of NumPy arrays into a single array
             frames = np.concatenate(frames)
-
-        # Check if 'frames' is a NumPy array and has at least one dimension
         if isinstance(frames, np.ndarray) and frames.ndim > 0:
-            frames_int16 = (frames * 32768).astype(np.int16)
+            frames_int16 = frames.astype(np.int16)
         else:
-            print(f"Error: 'frames' is not a valid NumPy array for saving. Type: {type(frames)}, Shape: {getattr(frames, 'shape', 'N/A')}")
+            print(f"Error saving: invalid array. {type(frames)}, {getattr(frames, 'shape', 'N/A')}")
             return
-
         with wave.open(filename, "wb") as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(self.audio_params["rate"])
             wf.writeframes(frames_int16.tobytes())
 
-    def _close_with_timeout(self, stream, timeout=2):
-        def close_stream():
-            try:
-                if stream:
-                    stream.stop_stream()
-                    stream.close()
-            except Exception as e:
-                print(f"Error closing stream: {e}")
-
-        thread = threading.Thread(target=close_stream)
-        thread.start()
-        thread.join(timeout)
-
-        if thread.is_alive():
-            print("Timeout occurred while closing stream.")
+    def _close_stream(self, stream):
+        """Closes the PyAudio stream safely."""
+        try:
+            if stream and stream.is_active():
+                stream.stop_stream()
+                stream.close()
+        except Exception as e:
+            print(f"Error closing stream: {e}")
 
     def _collect_audio_after_wake_word(self):
         print("Collecting audio after wake word...")
-
-        while True:  # Main loop for collecting audio and handling responses
+        while True:
             self.vad.audio_buffer = []
             stream = self.p.open(
-                format=self.audio_params["format"],
+                format=pyaudio.paInt16,
                 channels=self.audio_params["channels"],
                 rate=self.audio_params["rate"],
                 input=True,
                 frames_per_buffer=self.audio_params["chunk_size"] * 2,
             )
+            try:
+                speech_ended = False
+                while not speech_ended:
+                    data = stream.read(self.audio_params["chunk_size"], exception_on_overflow=False)
+                    audio_chunk = np.frombuffer(data, dtype=np.int16)
+                    speech_continue, audio_frames, had_voiced = self.vad.process_audio_frame(audio_chunk)
 
-            speech_ended = False
-            while not speech_ended:
-                data = stream.read(self.audio_params["chunk_size"])
-                audio_chunk = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
-                
-                # Unpack the extra flag from the VAD output
-                speech_continue, audio_frames, had_voiced = self.vad.process_audio_frame(audio_chunk)
-
-                if audio_frames:
-                    # If only silence was detected, skip sending audio and return to wake word detection
-                    if not had_voiced:
-                        print("Only silence detected. Returning to wake word detection.")
-                        self._close_with_timeout(stream)
-                        return
-
-                    if DEBUG:
-                        self._save_audio_to_file(audio_frames, filename="wake_word_audio.wav")
-
-                    audio_to_send = audio_frames
-                    if audio_to_send:
-                        audio_data_np = np.concatenate(audio_to_send, axis=0)
-                        self._send_audio(audio_data_np)
-                        print("Audio sent to server. Waiting for response...")
+                    if audio_frames:
+                        if not had_voiced:
+                            print("Only silence. Back to wake word.")
+                            self._close_stream(stream)
+                            return
+                        if DEBUG:
+                             self._save_audio_to_file(audio_frames, "post_wake.wav")
+                        self._send_audio(audio_frames)
+                        print("Audio sent. Waiting...")
 
                         response_audio, next_state = self._receive_response()
                         if response_audio is not None:
-                            print(f"response_audio: {response_audio}")
-                            print(f"response_audio.shape: {response_audio.shape}")
-                            print(f"response_audio.dtype: {response_audio.dtype}")
                             if DEBUG:
-                                self._save_audio_to_file(
-                                    response_audio,
-                                    filename="response_audio.wav",
-                                )
+                                self._save_audio_to_file(response_audio, "response.wav")
                             self._play_audio(response_audio)
-                            print(f"Response received and played. Next state: {next_state}")
-
-                            self._close_with_timeout(stream)
-
+                            print(f"Response played. Next: {next_state}")
                             if next_state == "WAKEWORD":
-                                return  # Go back to wake word detection
-                            elif next_state == "VAD":
-                                speech_ended = True  # Go to the beginning of the main loop
-                                break
-                            else:
-                                print("Error: Unknown next state received.")
+                                self._close_stream(stream)
                                 return
-                        else:
-                            self._close_with_timeout(stream)
+                            elif next_state == "VAD":
+                                continue
+                            else:
+                                print("Error: Unknown state.")
+                                self._close_stream(stream)
+                                return
+                        else: # no response
+                            self._close_stream(stream)
                             return
+            finally:
+                self._close_stream(stream)
+
+    def _process_audio_chunk(self, audio_chunk):
+        """Processes a chunk, returns (predicted_index, probability)."""
+        audio_length = torch.tensor([audio_chunk.size(1)])
+        with torch.no_grad():
+            logits = self.model(audio_chunk, audio_length)
+            probabilities = torch.softmax(logits, dim=-1)
+            predicted_class_index = torch.argmax(probabilities, dim=-1).item()
+            probability = probabilities[0, predicted_class_index].item()
+        return predicted_class_index, probability
+
+    def _wake_word_detection_loop(self):
+        """Records audio, checks for wake word (using current and previous chunks)."""
+        stream = self.p.open(
+            format=pyaudio.paInt16,
+            channels=self.audio_params["channels"],
+            rate=self.audio_params["rate"],
+            input=True,
+            frames_per_buffer=self.audio_params["chunk_size"],
+        )
+        print("Listening for wake word...")
+        print(f"Initial overlap_buffer size: {self.overlap_buffer.size()}")
+
+        # --- FLUSH INITIAL AUDIO DATA ---
+        print("Flushing initial audio data...")
+        initial_flush_duration = 0.1  # Seconds
+        initial_flush_samples = int(self.audio_params["rate"] * initial_flush_duration)
+        stream.read(initial_flush_samples, exception_on_overflow=False)
+        print("Flush complete.")
+        # ----------------------------------
+
+        try:
+            while not self.wake_word_detected:
+                data = stream.read(self.audio_params["chunk_size"], exception_on_overflow=False)
+                audio_array = np.frombuffer(data, dtype=np.int16)
+                current_chunk = (torch.from_numpy(audio_array).unsqueeze(0).to(torch.float32) / 32768.0)
+
+                # --- Combine with Previous Chunk (if available) ---
+                if self.previous_chunk is not None:
+                    combined_input = torch.cat((self.previous_chunk, current_chunk), dim=1)
+                else:
+                    combined_input = current_chunk  # First chunk, use only current
+
+				# --- Process combined chunk ---
+                if combined_input.size(1) >= self.audio_params["chunk_size"]:
+                    predicted_index, probability = self._process_audio_chunk(combined_input)
+                    predicted_label = self.labels[predicted_index]
+
+                    if DEBUG:
+                        print(f"Predicted label: {predicted_label}, Probability: {probability:.4f}")
+
+                    if predicted_label.lower() == WAKE_WORD and probability >= PROBABILITY_THRESHOLD:
+                        print("Wake word detected!")
+                        self.wake_word_detected = True
+                        break
+                # --- Update previous_chunk ---
+                self.previous_chunk = current_chunk
+
+                # --- overlap buffer is not used in this logic ---
+
+        finally:
+            self._close_stream(stream)
+            self.previous_chunk = None  # Reset for next loop
 
     def run(self):
+        """Main client loop."""
         self._connect_to_server()
-        print("Client started. Listening for wake word...")
+        if self.socket is None:
+             return
+        print("Client started. Listening...")
         try:
             while True:
-                stream = None
-                try:
-                    stream = self.p.open(
-                        format=self.audio_params["format"],
-                        channels=self.audio_params["channels"],
-                        rate=self.audio_params["rate"],
-                        input=True,
-                        frames_per_buffer=self.audio_params["chunk_size"],
-                    )
-                    print("Listening for wake word...")
-
-                    chunk_duration = self.audio_params["chunk_size"] / self.audio_params["rate"]
-                    num_chunks_per_buffer = int(CHUNK_LENGTH_S / chunk_duration)
-                    buffer = []
-
-                    while True:
-                        data = stream.read(self.audio_params["chunk_size"])
-                        audio_chunk = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
-                        buffer.append(audio_chunk)
-
-                        if len(buffer) >= num_chunks_per_buffer:
-                            audio_to_process = np.concatenate(buffer)
-                            predictions = self.wake_word_detector(audio_to_process)
-                            prediction = predictions[0]
-
-                            if DEBUG:
-                                print(f"Prediction: {prediction}")
-
-                            if (
-                                prediction["label"] == WAKE_WORD
-                                and prediction["score"] > PROB_THRESHOLD
-                            ):
-                                print("Wake word detected! Starting VAD.")
-                                self.vad.audio_buffer = []
-                                self._close_with_timeout(stream)
-                                self._collect_audio_after_wake_word()
-                                break  # Exit the inner while loop after processing audio
-
-                            buffer = buffer[len(buffer) - num_chunks_per_buffer + 1:]
-
-                except Exception as e:
-                    print(f"Error during audio processing: {e}")
-                    time.sleep(1)
-                finally:
-                    if stream:
-                        self._close_with_timeout(stream)
-
+                self.wake_word_detected = False
+                self.overlap_buffer = torch.tensor([], dtype=torch.float32) #reset
+                self.previous_chunk = None  # Reset previous_chunk
+                self.led_waiting_wake_word.start_sequence()
+                self._wake_word_detection_loop()
+                self.led_waiting_wake_word.stop_sequence()
+                self.led_wake_word.start_sequence()
+                if self.wake_word_detected:
+                    self._collect_audio_after_wake_word()
+                self.led_wake_word.stop_sequence()
         except KeyboardInterrupt:
-            print("Stopping client...")
+            print("Stopping.")
         finally:
             self.p.terminate()
             self._disconnect_from_server()
@@ -336,11 +349,28 @@ if __name__ == "__main__":
     audio_params = {
         "format": pyaudio.paInt16,
         "channels": 1,
-        "rate": 24000,  
-        "chunk_size": int(16000 * 0.5),
-        "threshold": 100,
+        "rate": 16000,
+        "chunk_size": int(16000 * 0.5),  # 0.5 seconds
+        "threshold": 400,  # Start high, adjust
     }
+
+    model = get_model()
+    if model is None:
+        print("Error: Model loading failed.")
+        exit()
+
+    labels = [
+        'backward', 'bed', 'bird', 'cat', 'dog', 'down', 'eight', 'five', 'follow',
+        'forward', 'four', 'go', 'happy', 'house', 'learn', 'left', 'marvin',
+        'nine', 'no', 'off', 'on', 'one', 'right', 'seven', 'sheila', 'six',
+        'stop', 'three', 'tree', 'two', 'up', 'visual', 'wow', 'yes', 'zero'
+    ]
+
     client = Client(
-        server_ip="127.0.0.1", server_port=8080, audio_params=audio_params
+        server_ip="192.168.1.2",  #  your server's IP
+        server_port=8080,
+        audio_params=audio_params,
+        model=model,
+        labels=labels,
     )
     client.run()
