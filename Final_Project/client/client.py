@@ -10,7 +10,7 @@ import threading
 import base64
 import json
 import queue
-from wake_word_model import get_model
+from Final_Project.client.utils import get_model
 from dotenv import load_dotenv
 
 # Load environment variables
