@@ -2,6 +2,7 @@ import torch
 import wave
 import numpy as np
 from wake_word_model import get_model  # Your model loading function
+from torchinfo import summary
 
 def test_model_with_wav(wav_filepath, model_path="path/to/your/traced_model.pt", labels=None):
     """
@@ -17,7 +18,8 @@ def test_model_with_wav(wav_filepath, model_path="path/to/your/traced_model.pt",
     """
 
     # --- 1. Load the Model ---
-    model = get_model()
+    model = get_model(path=model_path)  # Load your model
+    print(summary(model, input_data=(torch.randn(1, 16000) , torch.tensor([16000]))))  # Display model summary
     if model is None:
         print("Error: Model loading failed.")
         return None
@@ -86,6 +88,6 @@ if __name__ == "__main__":
     'nine', 'no', 'off', 'on', 'one', 'right', 'seven', 'sheila', 'six',
     'stop', 'three', 'tree', 'two', 'up', 'visual', 'wow', 'yes', 'zero'
     ]  # Your model's labels
-    test_model_with_wav("test_recording.wav", labels=labels)  # Replace with your WAV file
+    test_model_with_wav("test_recording.wav", labels=labels, model_path = "../best_model.pth")  # Replace with your WAV file
     # You can also test with the VAD recording:
     # test_model_with_wav("vad_test_recording.wav", model_path="your_model.pt", labels=your_labels)
