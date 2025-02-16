@@ -1,71 +1,85 @@
 import threading
 import time
-from led_sequences.base_sequence import BaseSequence
 
 class AnimationManager:
-    def __init__(self, initial_animation: BaseSequence):
+    def __init__(self, initial_animation, update_interval=0.01):
+        """
+        initial_animation: an instance of BaseSequence (or a subclass)
+        update_interval: how often (in seconds) to update the LED strip
+        """
         self.current_animation = initial_animation
         self.next_animation = None
-        self.transitioning = False
-        self.transition_duration = 1.0  # Default transition time in seconds
+        self.transition_duration = 1.0
+        self.transition_start = None  # When the transition started (None if not transitioning)
+        self.update_interval = update_interval
         self.lock = threading.Lock()
-        self.thread = None  # Track animation thread
+        self.running = True
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
 
-        # Start the initial animation
-        self.current_animation.start_sequence()
+    def _run(self):
+        """Main loop: poll the current animation(s) and write frames to the LED strip."""
+        while self.running:
+            with self.lock:
+                if self.transition_start is not None:
+                    # In transition mode: compute progress [0,1]
+                    elapsed = time.time() - self.transition_start
+                    progress = min(elapsed / self.transition_duration, 1.0)
+                    # Get frames from both animations
+                    current_frame = self.current_animation.get_current_frame()
+                    next_frame = self.next_animation.get_current_frame()
+                    # Blend the two frames
+                    frame_to_write = self._blend_frames(current_frame, next_frame, progress)
+                    if progress >= 1.0:
+                        # Transition finished: new animation becomes current.
+                        self.current_animation = self.next_animation
+                        self.next_animation = None
+                        self.transition_start = None
+                else:
+                    # No transition: simply get the current frame.
+                    frame_to_write = self.current_animation.get_current_frame()
 
-    def set_animation(self, new_animation: BaseSequence, transition_duration=1.0):
-        """Smoothly transition from the current animation to the new one."""
-        with self.lock:
-            if self.transitioning:
-                return  # Prevent overlapping transitions
+            # Write the frame (using whichever animation’s _write works on the LED strip)
+            self.current_animation._write(frame_to_write)
+            time.sleep(self.update_interval)
 
-            self.next_animation = new_animation
-            self.transition_duration = transition_duration
-            self.transitioning = True
-
-            # Start the transition in a separate thread
-            self.thread = threading.Thread(target=self._handle_transition)
-            self.thread.start()
-
-    def _handle_transition(self):
-        """Smooth transition between animations by blending frames."""
-        start_time = time.time()
-        while time.time() - start_time < self.transition_duration:
-            progress = (time.time() - start_time) / self.transition_duration
-            progress = min(1.0, progress)  # Ensure it never goes above 1.0
-
-            # Get frames from both animations
-            old_frame = self.current_animation.get_current_frame()
-            new_frame = self.next_animation.get_current_frame()
-
-            # Blend frames
-            blended_frame = self._blend_frames(old_frame, new_frame, progress)
-
-            # Send blended frame to LEDs
-            self.current_animation._write(blended_frame)
-            time.sleep(0.05)  # Smooth blending
-
-        # Complete transition
-        with self.lock:
-            self.current_animation.stop_sequence(blocking=False)  # Stop old animation only after transition
-            self.current_animation = self.next_animation
-            self.current_animation.start_sequence()
-            self.next_animation = None
-            self.transitioning = False
-
-    def _blend_frames(self, old_frame, new_frame, progress):
-        """Blend two frames based on transition progress."""
+    def _blend_frames(self, frame1, frame2, progress):
+        """
+        Blend two frames so that the LED color transitions smoothly.
+        Each LED is represented as [brightness_byte, blue, green, red].
+        """
         blended_frame = []
-        for old_led, new_led in zip(old_frame, new_frame):
-            blended_led = [
-                int(old_val * (1 - progress) + new_val * progress) for old_val, new_val in zip(old_led, new_led)
-            ]
-            blended_frame.append(blended_led)
+        for led1, led2 in zip(frame1, frame2):
+            # Extract brightness values (0-31)
+            brightness1 = led1[0] & 0x1F
+            brightness2 = led2[0] & 0x1F
+            # Blend brightness
+            blended_brightness = int(brightness1 * (1 - progress) + brightness2 * progress)
+            brightness_byte = 0xE0 | blended_brightness
+
+            # Blend each color channel (B, G, R)
+            blue = int(led1[1] * (1 - progress) + led2[1] * progress)
+            green = int(led1[2] * (1 - progress) + led2[2] * progress)
+            red = int(led1[3] * (1 - progress) + led2[3] * progress)
+
+            blended_frame.append([brightness_byte, blue, green, red])
         return blended_frame
 
-    def stop_sequence(self, blocking=True):
-        """Stop the current animation gracefully."""
+
+    def set_animation(self, new_animation, transition_duration=1.0):
+        """
+        Begin a smooth transition to a new animation.
+        new_animation: a BaseSequence instance.
+        transition_duration: duration of the blend (in seconds).
+        """
         with self.lock:
-            if self.current_animation:
-                self.current_animation.stop_sequence(blocking)
+            self.next_animation = new_animation
+            self.transition_duration = transition_duration
+            self.transition_start = time.time()
+
+    def stop(self):
+        """Stop the manager loop and turn off LEDs."""
+        self.running = False
+        self.thread.join()
+        # Optionally turn off LEDs after stopping:
+        self.current_animation.turn_off_leds()
