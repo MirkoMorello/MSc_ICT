@@ -13,6 +13,7 @@ import queue
 from utils import get_model, audio_amplifier
 from dotenv import load_dotenv
 
+
 # Load environment variables
 load_dotenv()
 
@@ -20,12 +21,16 @@ SERVER_ADDRESS = os.getenv("SERVER_ADDRESS", "localhost")
 SERVER_PORT = int(os.getenv("SERVER_PORT", 8080))
 DEPLOYMENT_MODE = os.getenv("DEPLOYMENT_MODE", "dev")
 
-
 if DEPLOYMENT_MODE == "prod":
     from led_sequences.fixed import Fixed
     from led_sequences.rainbow import Rainbow
     from led_sequences.colors import Colors
+    from led_sequences.animation_manager import AnimationManager
+    from led_sequences.fixed import Fixed
+    from led_sequences.loading import Loading
     LED_AVAILABLE = True
+    fixed_anim = Fixed(color=(0, 0, 0), brightness=0.5)
+    anim_manager = AnimationManager(fixed_anim)
 else:
     LED_AVAILABLE = False
 
@@ -263,7 +268,7 @@ class Client:
                     audio_chunk = np.frombuffer(data, dtype=np.int16)
                     if DEPLOYMENT_MODE == 'prod':
                         audio_chunk = audio_amplifier(audio_chunk)
-                    speech_continue, audio_frames, had_voiced = self.vad.process_audio_frame(chunk_amp)
+                    speech_continue, audio_frames, had_voiced = self.vad.process_audio_frame(audio_chunk)
 
                     if audio_frames:
                         if not had_voiced:
@@ -274,6 +279,9 @@ class Client:
                              self._save_audio_to_file(audio_frames, "post_wake.wav")
                         self._send_audio(audio_frames)
                         print("Audio sent. Waiting...")
+                        if LED_AVAILABLE:
+                            loading = Loading(color=(0, 0, 255), brightness=0.7, duration=5)
+                            anim_manager.set_animation(loading, transition_duration=1.5)
 
                         response_audio, next_state = self._receive_response()
                         if response_audio is not None:
