@@ -525,10 +525,21 @@ class Server:
             if self.server_socket:
                 self.server_socket.close()
             logger.info("Server shut down.")
-            # Dump the conversation_stats_list to a JSON file.
-            with open("conversation_stats.json", "w") as f:
-                json.dump(conversation_stats_list, f, indent=2, cls=NumpyEncoder)
-            logger.info("Conversation statistics saved to 'conversation_stats.json'.")
+            # Append the new conversation_stats_list to the existing JSON file.
+            stats_filename = "conversation_stats.json"
+            existing_stats = []
+            if os.path.exists(stats_filename):
+                try:
+                    with open(stats_filename, "r") as f:
+                        existing_stats = json.load(f)
+                except Exception as e:
+                    logger.warning(f"Could not read existing stats file: {e}")
+            # Extend the existing stats with new ones.
+            existing_stats.extend(conversation_stats_list)
+            with open(stats_filename, "w") as f:
+                json.dump(existing_stats, f, indent=2, cls=NumpyEncoder)
+            logger.info(f"Conversation statistics appended to '{stats_filename}'.")
+
 
 if __name__ == "__main__":
     server = Server(SERVER_IP, SERVER_PORT)
