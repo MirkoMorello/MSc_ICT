@@ -152,7 +152,7 @@ class Client:
             print("Not connected to server. Cannot send audio.")
             return
         try:
-            audio_data_float32 = np.concatenate(audio_data).astype(np.float32) / 32768.0
+            audio_data_float32 = np.concatenate(audio_data).astype(np.float32) / 32768.0 # Normalize
             packed_data = audio_data_float32.tobytes()
             self.socket.sendall(struct.pack("!I", len(packed_data)))
             self.socket.sendall(packed_data)
@@ -385,7 +385,7 @@ if __name__ == "__main__":
         "channels": 1,
         "rate": 16000,
         "chunk_size": int(16000 * 0.5),  # 0.5 seconds
-        "threshold": 60,  # Start high, adjust
+        "threshold": 100,  # Start high, adjust
     }
 
     model = get_model(path = "../best_model.pth")
