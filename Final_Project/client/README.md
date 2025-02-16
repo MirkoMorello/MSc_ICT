@@ -11,7 +11,7 @@ This is the client class, this will be deployed on a Raspberry Pi.
 | Microphone Data 1 | **MIC_D1**                   | **GPIO 20**     | **38**               |                              |
 | Microphone Data 2 | **MIC_D2**                   | **GPIO 26**     | **37**               |                              |
 | Microphone Data 3 | **MIC_D3**                   | **GPIO 16**     | **36**               |                              |
-| Microphone WS     | **MIC_WS**                   | **GPIO 24**     | **18**               | (Word Select/LRCK)           |
-| Microphone Clock  | **MIC_CK**                   | **GPIO 1**      | **28**               | (Note: GPIO 1 is on PIN 28)  |
+| Microphone WS     | **MIC_WS**                   | **GPIO 19**     | **35**               | (Word Select/LRCK)           |
+| Microphone Clock  | **MIC_CK**                   | **GPIO 18**      | **12**               | PCM Clock  |
 | Power Input       | **VIN** (3.3V)               | –               | **1**                | 3.3VDC supply                |
 | Ground            | **GND**                      | –               | **6**                | Common ground                |
