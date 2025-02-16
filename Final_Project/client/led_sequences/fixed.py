@@ -2,19 +2,25 @@ from led_sequences.base_sequence import BaseSequence
 import time
 
 class Fixed(BaseSequence):
-    def __init__(self, color, brightness = 0.5):
+    def __init__(self, color, brightness=0.5):
         super().__init__()
         self.color = color
         self.brightness = brightness
 
-    def sequence(self, semaphore):
+    def get_current_frame(self):
+        """
+        Returns the current LED frame as a list of LED states.
+        Each LED state is a list: [brightness_byte, blue, green, red].
+        """
         r, g, b = self.color
         max_brightness = int(self.brightness * 31)
+        frame = []
+        for _ in range(self.get_led_count()):
+            frame.append([0xE0 | max_brightness, b, g, r])
+        return frame
 
-        while(semaphore.is_keep_going()):
-            led_data = []
-            for _ in range(self.get_led_count()):
-                led_data.append([0xE0 | max_brightness, b, g, r])
-            self._write(led_data)
+    def sequence(self, semaphore):
+        while semaphore.is_keep_going():
+            frame = self.get_current_frame()
+            self._write(frame)
             time.sleep(0.01)
-    
