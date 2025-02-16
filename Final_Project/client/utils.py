@@ -9,6 +9,6 @@ def get_model(path):
     return model
 
 def audio_amplifier(audio_chunk):
-    audio_np = audio_chunk * 50
+    audio_np = audio_chunk * 30
     audio_np = np.clip(audio_np, -32768, 32767).astype(np.int16)
     return audio_np
