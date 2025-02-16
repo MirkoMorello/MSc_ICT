@@ -17,14 +17,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 SERVER_ADDRESS = os.getenv("SERVER_ADDRESS", "localhost")
-SERVER_PORT = int(os.getenv("SERVER_PORT", 12345))
+SERVER_PORT = int(os.getenv("SERVER_PORT", 8080))
+DEPLOYMENT_MODE = os.getenv("DEPLOYMENT_MODE", "dev")
 
-try:
+
+if DEPLOYMENT_MODE == "prod":
     from led_sequences.fixed import Fixed
     from led_sequences.rainbow import Rainbow
     from led_sequences.colors import Colors
     LED_AVAILABLE = True
-except ImportError:
+else:
     LED_AVAILABLE = False
 
     # Define dummy classes with the same interface
