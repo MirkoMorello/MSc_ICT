@@ -71,3 +71,7 @@ class BaseSequence(ABC):
     @abstractmethod
     def sequence(self, semaphore):
         pass
+
+    @abstractmethod
+    def get_current_frame(self):
+        pass
