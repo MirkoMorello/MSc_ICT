@@ -10,7 +10,7 @@ import threading
 import base64
 import json
 import queue
-from utils import get_model
+from utils import get_model, audio_amplifier
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -261,7 +261,9 @@ class Client:
                 while not speech_ended:
                     data = stream.read(self.audio_params["chunk_size"], exception_on_overflow=False)
                     audio_chunk = np.frombuffer(data, dtype=np.int16)
-                    speech_continue, audio_frames, had_voiced = self.vad.process_audio_frame(audio_chunk)
+                    if DEPLOYMENT_MODE == 'prod':
+                        audio_chunk = audio_amplifier(audio_chunk)
+                    speech_continue, audio_frames, had_voiced = self.vad.process_audio_frame(chunk_amp)
 
                     if audio_frames:
                         if not had_voiced:
