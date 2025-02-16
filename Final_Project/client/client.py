@@ -17,14 +17,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 SERVER_ADDRESS = os.getenv("SERVER_ADDRESS", "localhost")
-SERVER_PORT = int(os.getenv("SERVER_PORT", 12345))
+SERVER_PORT = int(os.getenv("SERVER_PORT", 8080))
+DEPLOYMENT_MODE = os.getenv("DEPLOYMENT_MODE", "dev")
 
-try:
+
+if DEPLOYMENT_MODE == "prod":
     from led_sequences.fixed import Fixed
     from led_sequences.rainbow import Rainbow
     from led_sequences.colors import Colors
     LED_AVAILABLE = True
-except ImportError:
+else:
     LED_AVAILABLE = False
 
     # Define dummy classes with the same interface
@@ -152,7 +154,7 @@ class Client:
             print("Not connected to server. Cannot send audio.")
             return
         try:
-            audio_data_float32 = np.concatenate(audio_data).astype(np.float32) / 32768.0
+            audio_data_float32 = np.concatenate(audio_data).astype(np.float32) / 32768.0 # Normalize
             packed_data = audio_data_float32.tobytes()
             self.socket.sendall(struct.pack("!I", len(packed_data)))
             self.socket.sendall(packed_data)
