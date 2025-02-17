@@ -98,7 +98,6 @@ class AudioToMFCCPreprocessor(nn.Module):
         )
 
     def forward(self, x, length):
-        #self.featurizer = self.featurizer.to(x.device)
         with torch.no_grad():
             x = self.featurizer(x)
         return x, length

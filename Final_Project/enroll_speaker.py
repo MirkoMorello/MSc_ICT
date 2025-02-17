@@ -8,7 +8,6 @@ from pyannote.audio import Model, Inference
 from pyannote.core import Segment
 from dotenv import load_dotenv
 
-# Load environment variables (e.g., HF_AUTH_TOKEN)
 load_dotenv()
 
 # --- CONFIGURATION ---
@@ -17,21 +16,18 @@ EMBEDDING_MODEL = "pyannote/embedding"
 OUTPUT_JSON = "../datasets/speaker_embeddings.json"
 HF_TOKEN = os.getenv("HF_AUTH_TOKEN", None)
 
-# Audio recording parameters
 RATE = 16000
 CHANNELS = 1
 CHUNK = 1024
 
-# Recording durations (in seconds)
 NUM_ENROLL_SAMPLES = 20
-ENROLL_RECORD_SECONDS = 3        # enrollment: short utterances
-IDENTIFY_RECORD_SECONDS = 5      # identification: longer utterance
+ENROLL_RECORD_SECONDS = 3   # enrollment
+IDENTIFY_RECORD_SECONDS = 5    # identification
 
-# Identification sliding window parameters (in seconds)
-IDENTIFY_WINDOW_DURATION = 2.0   # length of each sliding window
+IDENTIFY_WINDOW_DURATION = 2.0 # length of each sliding window
 IDENTIFY_WINDOW_STEP = 0.5       # step between windows
 
-# Similarity threshold for identification (adjust based on experiments)
+# Similarity threshold for identification
 IDENTIFY_THRESHOLD = 0.7
 
 # Device configuration for inference
@@ -41,9 +37,6 @@ device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cp
 # --- UTILITY FUNCTIONS ---
 
 def record_audio(filename, record_seconds):
-    """
-    Record audio from the default microphone and save it as a WAV file.
-    """
     pa = pyaudio.PyAudio()
     stream = pa.open(format=pyaudio.paInt16,
                      channels=CHANNELS,

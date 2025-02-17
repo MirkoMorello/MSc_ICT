@@ -14,7 +14,8 @@ from utils import get_model, audio_amplifier
 from dotenv import load_dotenv
 
 
-# Load environment variables
+# TODO: add logs like in the server
+
 load_dotenv()
 
 SERVER_ADDRESS = os.getenv("SERVER_ADDRESS", "localhost")
@@ -128,7 +129,7 @@ class Client:
         self.labels = labels
         self.overlap_buffer = torch.tensor([], dtype=torch.float32)
         self.overlap_samples = int(self.audio_params["rate"] * 0.25)
-        self.previous_chunk = None  # Store the previous chunk
+        self.previous_chunk = None  # store the previous chunk
         self.led_wake_word = Fixed(Colors.BLUE) 
         self.led_waiting_wake_word = Rainbow()
 
@@ -347,7 +348,7 @@ class Client:
                     audio_array = audio_amplifier(audio_chunk = audio_array, factor = 15)
                 current_chunk = (torch.from_numpy(audio_array).unsqueeze(0).to(torch.float32) / 32768.0)
 
-                # --- Combine with Previous Chunk (if available) ---
+                # --- Combine with previous chunk  ---
                 if self.previous_chunk is not None:
                     combined_input = torch.cat((self.previous_chunk, current_chunk), dim=1)
                 else:
@@ -368,11 +369,9 @@ class Client:
                 # --- Update previous_chunk ---
                 self.previous_chunk = current_chunk
 
-                # --- overlap buffer is not used in this logic ---
-
         finally:
             self._close_stream(stream)
-            self.previous_chunk = None  # Reset for next loop
+            self.previous_chunk = None  # reset for next loop
 
     def run(self):
         """Main client loop."""
@@ -384,7 +383,7 @@ class Client:
             while True:
                 self.wake_word_detected = False
                 self.overlap_buffer = torch.tensor([], dtype=torch.float32) #reset
-                self.previous_chunk = None  # Reset previous_chunk
+                self.previous_chunk = None  # also here
                 self._wake_word_detection_loop()
                 if self.wake_word_detected:
                     self._collect_audio_after_wake_word()
