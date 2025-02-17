@@ -21,7 +21,7 @@ class BaseSequence(ABC):
         def reset(self):
             self.keep_going = True
 
-    def __init__(self, led_count = LED_COUNT):
+    def __init__(self, led_count=LED_COUNT):
         self.led_count = led_count
 
         self.spi = spidev.SpiDev()
@@ -38,14 +38,14 @@ class BaseSequence(ABC):
         return self.led_count
 
     def _write(self, data):
-        if (len(data) != self.led_count):
+        if len(data) != self.led_count:
             raise ValueError("A list of length {} is required, where each element is a list composed of BRIGHTNESS + BGR".format(self.led_count))
         led_data = []
         led_data.extend(START_FRAME)
         for led in data:
             if min(led) < 0 or max(led) > 255:
                 raise ValueError("Each element in the list must be an integer between 0 and 255")
-            led_data.extend(led) 
+            led_data.extend(led)
         led_data.extend(END_FRAME)
         self.spi.xfer2(led_data)
 
@@ -68,6 +68,27 @@ class BaseSequence(ABC):
         led_data.extend(END_FRAME)
         self.spi.xfer2(led_data)
 
+    def blend_frames(self, frame1, frame2, blend_factor):
+        """
+        Blends two LED frames based on the given blend factor.
+        A blend_factor of 0 returns frame1; a blend_factor of 1 returns frame2.
+        Both frames must be lists of length `led_count` where each element is a list of 4 ints.
+        """
+        if len(frame1) != self.led_count or len(frame2) != self.led_count:
+            raise ValueError("Both frames must have length equal to led_count.")
+        blended_frame = []
+        for led1, led2 in zip(frame1, frame2):
+            blended_led = [
+                int(round(v1 * (1 - blend_factor) + v2 * blend_factor))
+                for v1, v2 in zip(led1, led2)
+            ]
+            blended_frame.append(blended_led)
+        return blended_frame
+
     @abstractmethod
     def sequence(self, semaphore):
+        pass
+
+    @abstractmethod
+    def get_current_frame(self):
         pass

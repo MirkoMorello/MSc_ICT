@@ -2,9 +2,10 @@ from led_sequences.base_sequence import BaseSequence
 import time 
 
 class Rainbow(BaseSequence):
-    def __init__(self, brightness = 0.5):
+    def __init__(self, brightness=0.5):
         super().__init__()
         self.brightness = brightness
+        self.start_time = time.time()
 
     def __wheel(self, pos):
         """Generate rainbow colors across 0-255 positions."""
@@ -16,17 +17,24 @@ class Rainbow(BaseSequence):
         else:
             pos -= 170
             return (0, pos * 3, 255 - pos * 3)
+
+    def get_current_frame(self):
+        """
+        Computes and returns the current LED frame for the rainbow animation.
+        """
+        elapsed = int((time.time() - self.start_time) * 100) % 256  # Cycle through 0-255
+        led_data = []
+
+        for i in range(self.get_led_count()):
+            color = self.__wheel((int(i * 256 / self.get_led_count()) + elapsed) & 255)
+            r, g, b = [int(c * self.brightness) for c in color]
+            led_data.append([0xE0 | int(self.brightness * 31), b, g, r])  # Brightness + BGR
         
+        return led_data
+
     def sequence(self, semaphore):
-        """Draw rainbow that uniformly distributes itself across all pixels."""
+        """Draw a rainbow that smoothly cycles across all LEDs."""
         while semaphore.is_keep_going():
-            for j in range(256):
-                if not semaphore.is_keep_going(): 
-                    break
-                led_data = []
-                for i in range(self.get_led_count()):
-                    color = self.__wheel((int(i * 256 / self.get_led_count()) + j) & 255)
-                    r, g, b = [int(c * self.brightness) for c in color]
-                    led_data.append([0xE0 | int(self.brightness*31), b, g, r]) # Brightness + BGR
-                self._write(led_data)
-                time.sleep(0.01)
+            frame = self.get_current_frame()
+            self._write(frame)
+            time.sleep(0.01)  # Smooth animation

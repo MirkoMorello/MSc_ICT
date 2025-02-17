@@ -13,6 +13,7 @@ import queue
 from utils import get_model, audio_amplifier
 from dotenv import load_dotenv
 
+
 # Load environment variables
 load_dotenv()
 
@@ -20,11 +21,21 @@ SERVER_ADDRESS = os.getenv("SERVER_ADDRESS", "localhost")
 SERVER_PORT = int(os.getenv("SERVER_PORT", 8080))
 DEPLOYMENT_MODE = os.getenv("DEPLOYMENT_MODE", "dev")
 
-
 if DEPLOYMENT_MODE == "prod":
     from led_sequences.fixed import Fixed
     from led_sequences.rainbow import Rainbow
     from led_sequences.colors import Colors
+    from led_sequences.animation_manager import AnimationManager
+    from led_sequences.fixed import Fixed
+    from led_sequences.loading import Loading
+    from led_sequences.pulse import Pulse
+    from led_sequences.colors import Colors
+    rainbow = Rainbow(brightness=0.7)
+    loading = Loading(color=Colors.BLUE, brightness=0.7, duration=7)
+    pulse_waiting = Pulse(color=Colors.BLUE, brightness=0.7)
+    pulse_speaking = Pulse(color=Colors.WHITE, brightness=0.7)
+    fixed = Fixed(color=Colors.BLACK, brightness=0.5)
+    anim_manager = AnimationManager(fixed)
     LED_AVAILABLE = True
 else:
     LED_AVAILABLE = False
@@ -84,8 +95,19 @@ class VoiceActivityDetector:
         if self.smoothed_energy > self.threshold:
             self.num_silent_frames = 0
             self.voiced_frames_detected = True
+            if LED_AVAILABLE:
+                if not isinstance(anim_manager.effective_animation(), Rainbow):
+                    print("Changing animation to rainbow")
+                    anim_manager.set_animation(rainbow, transition_duration=0.2)
+
+
         else:
             self.num_silent_frames += 1
+            if LED_AVAILABLE:
+                if not isinstance(anim_manager.effective_animation(), Loading):
+                    print("Changing animation to Loading")
+                    loading = Loading(color=Colors.BLUE, brightness=0.7, duration=3.5)
+                    anim_manager.set_animation(loading, transition_duration=0.2)
 
         if DEBUG:
             print(
@@ -263,7 +285,7 @@ class Client:
                     audio_chunk = np.frombuffer(data, dtype=np.int16)
                     if DEPLOYMENT_MODE == 'prod':
                         audio_chunk = audio_amplifier(audio_chunk)
-                    speech_continue, audio_frames, had_voiced = self.vad.process_audio_frame(chunk_amp)
+                    speech_continue, audio_frames, had_voiced = self.vad.process_audio_frame(audio_chunk)
 
                     if audio_frames:
                         if not had_voiced:
@@ -274,11 +296,15 @@ class Client:
                              self._save_audio_to_file(audio_frames, "post_wake.wav")
                         self._send_audio(audio_frames)
                         print("Audio sent. Waiting...")
+                        if LED_AVAILABLE:
+                            print("changing animation to pulse\n")
+                            anim_manager.set_animation(pulse_waiting, transition_duration=0.2)
 
                         response_audio, next_state = self._receive_response()
                         if response_audio is not None:
                             if DEBUG:
                                 self._save_audio_to_file(response_audio, "response.wav")
+                            anim_manager.set_animation(pulse_speaking, transition_duration=0.2)
                             self._play_audio(response_audio)
                             print(f"Response played. Next: {next_state}")
                             if next_state == "WAKEWORD":
@@ -328,6 +354,12 @@ class Client:
 
         try:
             while not self.wake_word_detected:
+                if LED_AVAILABLE:
+                    if not isinstance(anim_manager.next_animation, Fixed):
+                        if not isinstance(anim_manager.current_animation, Fixed):
+                            print("Changing animation to rainbow")
+                            anim_manager.set_animation(fixed, transition_duration=0.2)
+
                 data = stream.read(self.audio_params["chunk_size"], exception_on_overflow=False)
                 audio_array = np.frombuffer(data, dtype=np.int16)
                 current_chunk = (torch.from_numpy(audio_array).unsqueeze(0).to(torch.float32) / 32768.0)
@@ -370,13 +402,9 @@ class Client:
                 self.wake_word_detected = False
                 self.overlap_buffer = torch.tensor([], dtype=torch.float32) #reset
                 self.previous_chunk = None  # Reset previous_chunk
-                self.led_waiting_wake_word.start_sequence()
                 self._wake_word_detection_loop()
-                self.led_waiting_wake_word.stop_sequence()
-                self.led_wake_word.start_sequence()
                 if self.wake_word_detected:
                     self._collect_audio_after_wake_word()
-                self.led_wake_word.stop_sequence()
         except KeyboardInterrupt:
             print("Stopping.")
         finally:
@@ -389,7 +417,7 @@ if __name__ == "__main__":
         "channels": 1,
         "rate": 16000,
         "chunk_size": int(16000 * 0.5),  # 0.5 seconds
-        "threshold": 100,  # Start high, adjust
+        "threshold": 900,  # Start high, adjust
     }
 
     model = get_model(path = "../best_model.pth")
