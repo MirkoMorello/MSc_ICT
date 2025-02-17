@@ -16,5 +16,4 @@ loading = Loading(color=(0, 0, 255), brightness=0.7, duration=5)
 anim_manager.set_animation(loading, transition_duration=1.5)
 time.sleep(10)
 
-# When you’re done (e.g., on shutdown)
 anim_manager.stop()
