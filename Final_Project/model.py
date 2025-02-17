@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torchaudio.transforms as T
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 class MaskedConv1d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1,
@@ -96,6 +98,7 @@ class AudioToMFCCPreprocessor(nn.Module):
         )
 
     def forward(self, x, length):
+        #self.featurizer = self.featurizer.to(x.device)
         with torch.no_grad():
             x = self.featurizer(x)
         return x, length
