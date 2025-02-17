@@ -416,7 +416,7 @@ if __name__ == "__main__":
     ]
 
     client = Client(
-        server_ip=SERVER_ADDRESS,  #  your server's IP
+        server_ip=SERVER_ADDRESS,
         server_port=SERVER_PORT,
         audio_params=audio_params,
         model=model,
