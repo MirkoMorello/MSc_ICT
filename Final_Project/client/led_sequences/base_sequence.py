@@ -7,7 +7,15 @@ import spidev
 import threading
 from abc import ABC, abstractmethod
 
+"""
+    This is the abstract class used for represents a led sequence.
+"""
 class BaseSequence(ABC):
+
+    """
+        This class is used for representing a semaphore which is used for controlling
+        when an animation should terminate or not.
+    """
     class Semaphore:
         def __init__(self):
             self.keep_going = False
@@ -37,6 +45,9 @@ class BaseSequence(ABC):
     def get_led_count(self):
         return self.led_count
 
+    """
+        Method used for writing data to the i2c interface
+    """
     def _write(self, data):
         if len(data) != self.led_count:
             raise ValueError("A list of length {} is required, where each element is a list composed of BRIGHTNESS + BGR".format(self.led_count))
@@ -49,18 +60,27 @@ class BaseSequence(ABC):
         led_data.extend(END_FRAME)
         self.spi.xfer2(led_data)
 
+    """
+        Method used for starting a led sequence
+    """
     def start_sequence(self):
         if not self.__semaphore.is_keep_going():
             self.__semaphore.reset()
             self.thread = threading.Thread(target=self.sequence, args=(self.__semaphore,))
             self.thread.start()
     
+    """
+        Method used for stopping a led sequence
+    """
     def stop_sequence(self, blocking=True):
         self.__semaphore.stop()
         if blocking:
             self.thread.join()
         self.turn_off_leds()
 
+    """
+        Method used for turning all the leds off
+    """
     def turn_off_leds(self):
         led_data = []
         led_data.extend(START_FRAME)

@@ -1,6 +1,9 @@
 from led_sequences.base_sequence import BaseSequence
 import time
 
+"""
+    This class represents a rotating animation which consists in a single led of a given color rotating around a circular pattern.
+"""
 class Rotating(BaseSequence):
     def __init__(self, color, brightness=0.5, speed=0.5):
         super().__init__()

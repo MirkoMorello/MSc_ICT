@@ -1,6 +1,9 @@
 from led_sequences.base_sequence import BaseSequence
 import time
 
+"""
+    This class represents an led animation which consists in all the leds turning on and keepking that state until the stop_sequence method is not called
+"""
 class Fixed(BaseSequence):
     def __init__(self, color, brightness=0.5):
         super().__init__()

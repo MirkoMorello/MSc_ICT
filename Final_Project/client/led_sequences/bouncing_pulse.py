@@ -7,9 +7,9 @@ class BouncingPulse(BaseSequence):
         super().__init__()
         self.color = color
         self.duration = duration
-        self.wave_count = wave_count  # Number of waves per cycle
-        self.smoothness = smoothness  # Easing smoothness (1-4)
-        self.start_time = time.time()  # Store start time for consistent timing
+        self.wave_count = wave_count  
+        self.smoothness = smoothness 
+        self.start_time = time.time() 
 
     def _wave_function(self, t):
         """Composite wave function with sinusoidal easing."""
@@ -28,7 +28,7 @@ class BouncingPulse(BaseSequence):
         current_time = time.time()
         elapsed = current_time - self.start_time
         led_count = self.get_led_count()
-        phase_offset = 0.1  # Small phase offset between LEDs for extra smoothness
+        phase_offset = 0.1
         
         base_progress = (elapsed % self.duration) / self.duration
         
@@ -57,4 +57,4 @@ class BouncingPulse(BaseSequence):
         while semaphore.is_keep_going():
             frame = self.get_current_frame()
             self._write(frame)
-            time.sleep(0.005)  # Shorter sleep for smoother animation
+            time.sleep(0.005)  

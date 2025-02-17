@@ -1,5 +1,8 @@
 import enum
 
+"""
+    Enum used for representing a bunch of possible leds color combinations
+"""
 class Colors(enum.Enum):
     WHITE = (255, 255, 255)
     RED = (255, 0, 0)

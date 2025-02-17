@@ -1,6 +1,9 @@
 from led_sequences.base_sequence import BaseSequence
 import time
 
+"""
+    This class represents an animation consisting in all the led pulsing with a certain frequency and color
+"""
 class Pulse(BaseSequence):
     def __init__(self, color, brightness=0.5):
         super().__init__()
@@ -30,4 +33,4 @@ class Pulse(BaseSequence):
         while semaphore.is_keep_going():
             frame = self.get_current_frame()
             self._write(frame)
-            time.sleep(0.01)  # Smooth animation
+            time.sleep(0.01) 

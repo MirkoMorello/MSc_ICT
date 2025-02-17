@@ -2,14 +2,14 @@ from pydub import AudioSegment
 from pydub.playback import play
 
 AUDIO_FILE = "test_recording.wav"
-BOOST_DB = 30  # Increase volume by 30 dB (Adjust as needed)
+BOOST_DB = 30
 
 try:
     # Load the audio file
     sound = AudioSegment.from_wav(AUDIO_FILE)
 
     # Increase volume
-    louder_sound = sound + BOOST_DB  # Increase dB
+    louder_sound = sound + BOOST_DB 
     print(f"Playing {AUDIO_FILE} with +{BOOST_DB} dB volume boost...")
 
     # Play the boosted audio

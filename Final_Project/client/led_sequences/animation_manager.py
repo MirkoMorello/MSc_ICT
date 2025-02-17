@@ -1,6 +1,8 @@
 import threading
 import time
 
+# This class represents a transition manager used for controlling the transition between two animation. The aim is to create
+# the smoothest transition possible between the two animations
 class AnimationManager:
     def __init__(self, initial_animation, update_interval=0.01):
         self.current_animation = initial_animation
@@ -42,6 +44,9 @@ class AnimationManager:
             self.current_animation._write(frame_to_write)
             time.sleep(self.update_interval)
 
+    """
+        This methods tries to blend as much as possible the brighness and colors between the two animation 
+    """
     def _blend_frames(self, frame1, frame2, progress):
         blended_frame = []
         for led1, led2 in zip(frame1, frame2):
@@ -57,6 +62,9 @@ class AnimationManager:
             blended_frame.append([brightness_byte, blue, green, red])
         return blended_frame
 
+    """
+        used to set the new animation for which a transition is needed
+    """
     def set_animation(self, new_animation, transition_duration=1.0):
         with self.lock:
             self.next_animation = new_animation

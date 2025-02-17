@@ -1,6 +1,9 @@
 from led_sequences.base_sequence import BaseSequence
 import time 
 
+"""
+    This class represents a rainbow animation characterized by all the leds assuming a different rainbow color in a circular movement. 
+"""
 class Rainbow(BaseSequence):
     def __init__(self, brightness=0.5):
         super().__init__()
@@ -22,13 +25,13 @@ class Rainbow(BaseSequence):
         """
         Computes and returns the current LED frame for the rainbow animation.
         """
-        elapsed = int((time.time() - self.start_time) * 100) % 256  # Cycle through 0-255
+        elapsed = int((time.time() - self.start_time) * 100) % 256
         led_data = []
 
         for i in range(self.get_led_count()):
             color = self.__wheel((int(i * 256 / self.get_led_count()) + elapsed) & 255)
             r, g, b = [int(c * self.brightness) for c in color]
-            led_data.append([0xE0 | int(self.brightness * 31), b, g, r])  # Brightness + BGR
+            led_data.append([0xE0 | int(self.brightness * 31), b, g, r])
         
         return led_data
 
@@ -37,4 +40,4 @@ class Rainbow(BaseSequence):
         while semaphore.is_keep_going():
             frame = self.get_current_frame()
             self._write(frame)
-            time.sleep(0.01)  # Smooth animation
+            time.sleep(0.01)

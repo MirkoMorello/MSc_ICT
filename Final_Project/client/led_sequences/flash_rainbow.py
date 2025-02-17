@@ -4,19 +4,22 @@ import random
 import time
 import math
 
+"""
+
+"""
 class FlashRainbow(BaseSequence):
     def __init__(self, fade_duration=3.0, color_transition_duration=1.5, hue_speed=0.1):
         super().__init__()
         self.fade_duration = fade_duration
         self.color_transition_duration = color_transition_duration
-        self.hue_speed = hue_speed  # controls color change speed (0.0-1.0)
+        self.hue_speed = hue_speed
         self.base_hue = random.random()
         self.current_hues = [random.random() for _ in range(self.get_led_count())]
         self.target_hues = [random.random() for _ in range(self.get_led_count())]
         # Store timing state for the animation:
-        self._start_time = time.time()             # when the animation started (for fade_progress)
-        self._last_transition_update = time.time()   # when hues were last updated
-        self._transition_start = time.time()         # when the current hue transition began
+        self._start_time = time.time()
+        self._last_transition_update = time.time()
+        self._transition_start = time.time()
 
     def _gamma_correct(self, value):
         """Convert linear to perceptual brightness."""
