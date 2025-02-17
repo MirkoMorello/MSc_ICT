@@ -30,7 +30,6 @@ IDENTIFY_WINDOW_STEP = 0.5       # step between windows
 # Similarity threshold for identification
 IDENTIFY_THRESHOLD = 0.7
 
-# Device configuration for inference
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 
