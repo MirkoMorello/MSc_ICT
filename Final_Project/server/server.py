@@ -90,6 +90,8 @@ try:
         "pyannote/speaker-diarization-3.1"
         # If it is private and you do need auth, use: use_auth_token=HF_TOKEN
     )
+    diarization_pipeline.postprocessors.params.onset.min_duration_on = 0.2
+    diarization_pipeline.postprocessors.params.offset.min_duration_off = 0.2
     logger.info("Diarization pipeline loaded successfully.")
 except Exception as e:
     logger.warning(f"Could not load pyannote/speaker-diarization-3.1: {e}")
@@ -332,9 +334,16 @@ def perform_diarization_stt(
             spk_id, similarity = "Unknown", 0.0
         else:
             with torch.no_grad():
-                segment_embedding_torch = embedding_inference.crop(temp_wav, segment)
-            segment_embedding = segment_embedding_torch.data
+                segment_embedding = embedding_inference.crop(temp_wav, segment)
+            # Extract underlying data if the returned object has a 'data' attribute.
+            if hasattr(segment_embedding, "data"):
+                segment_embedding = segment_embedding.data
+            # Convert to a NumPy array if needed.
+            if isinstance(segment_embedding, torch.Tensor):
+                segment_embedding = segment_embedding.cpu().numpy()
             spk_id, similarity = speaker_id_from_embedding(segment_embedding, speaker_db, threshold=0.3)
+
+
 
         stt_seg_start = time.perf_counter()
         stt_result = stt_pipeline({"raw": segment_samples, "sampling_rate": sample_rate}, chunk_length_s=30)
@@ -390,7 +399,7 @@ class Server:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.stt_pipeline = pipeline(
             "automatic-speech-recognition",
-            model="openai/whisper-medium",
+            model="openai/whisper-large-v3-turbo",
             device=self.device
         )
 
