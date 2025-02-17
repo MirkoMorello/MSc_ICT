@@ -70,8 +70,7 @@ def record_audio(filename, record_seconds):
 
 def compute_embedding(wav_file, embedding_inference):
     """
-    Compute a speaker embedding for the entire audio file.
-    (Used for enrollment, where utterances are short.)
+    Compute a speaker embedding for the entire audio file. we'll use this for enrollment, not identification.
     """
     # Determine the duration of the audio file
     wf = wave.open(wav_file, 'rb')
@@ -112,10 +111,7 @@ def compute_embedding(wav_file, embedding_inference):
 def compute_embedding_sliding(wav_file, embedding_inference, window_duration, step):
     """
     Compute a robust speaker embedding from an audio file using a manual sliding window.
-    
-    For each window of duration `window_duration` (moving by `step` seconds),
-    an embedding is computed using the model's crop() method. Then, all window embeddings
-    are averaged and L2-normalized.
+    For each window of duration `window_duration` (moving by step seconds), an embedding is computed using the model's crop() method. Then, all window embeddings are averaged and L2-normalized.
     """
     # Determine the duration of the audio file
     wf = wave.open(wav_file, 'rb')
@@ -130,13 +126,12 @@ def compute_embedding_sliding(wav_file, embedding_inference, window_duration, st
         segment = Segment(start, start + window_duration)
         with torch.no_grad():
             emb = embedding_inference.crop(wav_file, segment)
-        # Extract underlying data from SlidingWindowFeature (if applicable)
         if hasattr(emb, "data"):
             emb = emb.data
         if isinstance(emb, torch.Tensor):
             emb = emb.cpu().numpy()
         if emb.ndim > 1:
-            # Average embeddings over frames within the window.
+            # average embeddings over frames within the window.
             emb = np.mean(emb, axis=0)
         norm = np.linalg.norm(emb)
         if norm > 0:
@@ -158,10 +153,6 @@ def compute_embedding_sliding(wav_file, embedding_inference, window_duration, st
 # --- CORE FUNCTIONS ---
 
 def enroll_speaker(embedding_inference):
-    """
-    Enroll a speaker by capturing multiple short utterances and aggregating their embeddings.
-    The final centroid embedding is stored in a JSON database.
-    """
     speaker_name = input("Enter the speaker's name to enroll (e.g., 'Mirko'): ").strip()
     enrollment_embeddings = []
 
@@ -171,9 +162,9 @@ def enroll_speaker(embedding_inference):
         emb = compute_embedding(fname, embedding_inference)
         print(f"[DEBUG] Enrollment sample {i+1}/{NUM_ENROLL_SAMPLES} embedding norm: {np.linalg.norm(emb):.4f}")
         enrollment_embeddings.append(emb)
-        os.remove(fname)  # Clean up temporary file
+        os.remove(fname) # clean up shite
 
-    # Compute the centroid of enrollment embeddings
+    # compute the centroid of enrollment embeddings
     enrollment_embeddings = np.array(enrollment_embeddings)
     centroid = np.mean(enrollment_embeddings, axis=0)
     centroid_norm = np.linalg.norm(centroid)
@@ -182,7 +173,7 @@ def enroll_speaker(embedding_inference):
     else:
         print("[WARNING] Centroid embedding has zero norm!")
     
-    # Load existing speaker database (if any) or initialize a new one.
+    
     try:
         with open(OUTPUT_JSON, "r") as f:
             speaker_dict = json.load(f)
@@ -198,23 +189,17 @@ def enroll_speaker(embedding_inference):
 
 
 def identify_speaker(embedding_inference, threshold=IDENTIFY_THRESHOLD):
-    """
-    Identify a speaker by recording an utterance and comparing its embedding
-    against the enrolled speakers' centroids.
-    
-    This function uses a sliding window approach to obtain a robust embedding.
-    """
+
     print("Identifying speaker. Please speak now...")
     fname = "temp_identify.wav"
     record_audio(fname, IDENTIFY_RECORD_SECONDS)
     
-    # Use the sliding window method for a robust embedding.
+    # sliding window method for a robust embedding.
     emb = compute_embedding_sliding(fname, embedding_inference,
                                     window_duration=IDENTIFY_WINDOW_DURATION,
                                     step=IDENTIFY_WINDOW_STEP)
-    os.remove(fname)  # Clean up temporary file
-
-    # Load enrolled speakers
+    os.remove(fname)
+    
     try:
         with open(OUTPUT_JSON, "r") as f:
             speaker_dict = json.load(f)
@@ -222,7 +207,7 @@ def identify_speaker(embedding_inference, threshold=IDENTIFY_THRESHOLD):
         print("No enrolled speakers found. Please enroll first.")
         return None
 
-    # Compute cosine similarity (dot product, since embeddings are normalized)
+    # compute cosine similarity (dot product, since embeddings are normalized)
     similarities = {}
     for speaker, centroid in speaker_dict.items():
         centroid = np.array(centroid)
@@ -249,7 +234,6 @@ if __name__ == "__main__":
 
     print("Loading embedding model...")
     model = Model.from_pretrained(EMBEDDING_MODEL, use_auth_token=HF_TOKEN)
-    # Set skip_aggregation=True to allow manual aggregation (sliding window or full utterance)
     embedding_inference = Inference(model, skip_aggregation=True, device=device)
     print("Model loaded.")
 
