@@ -284,7 +284,8 @@ class Client:
                         if response_audio is not None:
                             if DEBUG:
                                 self._save_audio_to_file(response_audio, "response.wav")
-                            anim_manager.set_animation(pulse_speaking, transition_duration=0.2)
+                            if LED_AVAILABLE:
+                                anim_manager.set_animation(pulse_speaking, transition_duration=0.2)
                             self._play_audio(response_audio)
                             print(f"Response played. Next: {next_state}")
                             if next_state == "WAKEWORD":
