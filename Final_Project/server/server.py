@@ -73,7 +73,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Define emoji mapping for different states/steps
+
 STATE_EMOJI = {
     "VOICE_RECEIVED": "🟢",
     "STT_DIARIZATION": "🔵",
@@ -83,14 +83,13 @@ STATE_EMOJI = {
     "VAD": "🟢",
 }
 
-# Global list to store conversation statistics
+# global list to store conversation statistics
 conversation_stats_list: List[Dict[str, Any]] = []
 
 # =============================================================================
 # Load Models and Pipelines
 # =============================================================================
 
-# Attempt to load pyannote diarization pipeline
 try:
     diarization_pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization-3.1",
@@ -123,10 +122,9 @@ if embedding_model is not None:
 else:
     embedding_inference = None
 
-# Attempt to build a re-segmentation module (if installed)
+# Attempt to build a re-segmentation module
 resegmenter = None
 if Resegmentation and embedding_model:
-    # This uses the same embedding_model for segmentation
     resegmenter = Resegmentation(segmentation=embedding_model)
     logger.info("Resegmentation module instantiated.")
 else:
@@ -161,7 +159,7 @@ class LLamaConversationHandler:
         logger.info("LLama conversation handler initialized.")
 
     def process_input(self, text: str) -> Tuple[str, float]:
-        # Append user input to conversation history.
+        # append user input to context
         self.conversation.context.append({"role": "user", "content": text})
         
         messages = [
@@ -169,7 +167,7 @@ class LLamaConversationHandler:
         ]
         messages.extend(self.conversation.context)
 
-        # Build prompt
+        # build prompt
         if hasattr(self.tokenizer, "apply_chat_template"):
             prompt = self.tokenizer.apply_chat_template(
                 messages,
@@ -385,7 +383,7 @@ def perform_diarization_stt(
     # ==============================
     diarization = resegment_with_embeddings(diarization, temp_wav)
 
-    # Build a list of (start, end, label)
+    
     raw_segments = []
     for turn, _, label in diarization.itertracks(yield_label=True):
         start_time_seg = max(0.0, min(turn.start, file_duration))
@@ -485,7 +483,7 @@ class Server:
         )
 
         self.tts_model, self.voice = build_kokoro_tts()
-        # Load the speaker database
+        # load the speaker database
         self.speaker_db = load_speaker_database("../datasets/speaker_embeddings.json")
         logger.info("Server initialized.")
 
@@ -565,7 +563,7 @@ class Server:
                     t_stt = (time.perf_counter() - t_stt_start) * 1000
                     logger.info(f"🔵 STT & Diarization completed in {t_stt:.2f} ms.")
 
-                    # Pass the aggregated text to the LLM
+                    # pass the aggregated text to the LLM
                     t_llm_start = time.perf_counter()
                     logger.info("🟣 Interacting with LLM...")
                     response, probability = self.llm_handler.process_input(conversation_text)
@@ -574,13 +572,14 @@ class Server:
 
                     token_count = len(self.llm_handler.tokenizer.encode(response))
 
-                    # Generate TTS
+                    # generate TTS
                     t_tts_start = time.perf_counter()
                     audio_response, tts_phonemes = generate_tts(self.tts_model, self.voice, response)
                     t_tts = (time.perf_counter() - t_tts_start) * 1000
                     logger.info(f"🟠 TTS generation completed in {t_tts:.2f} ms.")
 
-                    # Decide next state (WAKEWORD / VAD)
+                    # decide next state (WAKEWORD / VAD)
+                    # TODO: Implement a more sophisticated state machine, sentiment analysis?
                     next_state = "WAKEWORD" if probability > 0.5 else "VAD"
 
                     total_elapsed = (time.perf_counter() - total_loop_start) * 1000
