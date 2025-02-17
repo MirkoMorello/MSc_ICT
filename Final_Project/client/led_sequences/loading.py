@@ -1,13 +1,16 @@
 from led_sequences.base_sequence import BaseSequence
 import time
 
+"""
+    This class represents a loading animation showed during the grace period before the data are sent to the server
+"""
 class Loading(BaseSequence):
     def __init__(self, color, duration, brightness=0.5):
         super().__init__()
         self.color = color
         self.duration = duration
         self.brightness = brightness
-        self.start_time = time.time()  # Store start time for consistent timing
+        self.start_time = time.time()
 
     def get_current_frame(self):
         """
@@ -16,21 +19,21 @@ class Loading(BaseSequence):
         """
         current_time = time.time()
         elapsed_time = current_time - self.start_time
-        progress = (elapsed_time % self.duration) / self.duration  # Normalized progress (0.0 to 1.0)
+        progress = (elapsed_time % self.duration) / self.duration 
 
         led_count = self.get_led_count()
         led_progress = progress * led_count
-        full_led = int(led_progress)  # Fully lit LEDs
-        fraction = led_progress - full_led  # Partially lit LED progress
+        full_led = int(led_progress) 
+        fraction = led_progress - full_led 
 
         led_states = []
         for i in range(led_count):
             if i < full_led:
-                led_brightness = 1.0  # Fully lit
+                led_brightness = 1.0 
             elif i == full_led and i < led_count:
-                led_brightness = fraction  # Partial brightness
+                led_brightness = fraction
             else:
-                led_brightness = 0.0  # Off
+                led_brightness = 0.0
 
             # Calculate total brightness and clamp between 0 and 1
             total_brightness = max(0.0, min(1.0, self.brightness * led_brightness))
@@ -46,4 +49,4 @@ class Loading(BaseSequence):
         while semaphore.is_keep_going():
             frame = self.get_current_frame()
             self._write(frame)
-            time.sleep(0.01)  # Short delay for smooth animation
+            time.sleep(0.01) 

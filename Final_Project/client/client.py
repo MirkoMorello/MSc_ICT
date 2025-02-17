@@ -22,6 +22,9 @@ SERVER_ADDRESS = os.getenv("SERVER_ADDRESS", "localhost")
 SERVER_PORT = int(os.getenv("SERVER_PORT", 8080))
 DEPLOYMENT_MODE = os.getenv("DEPLOYMENT_MODE", "dev")
 
+"""
+    prod means that the code is being executed on the raspberry pi. 
+"""
 if DEPLOYMENT_MODE == "prod":
     from led_sequences.fixed import Fixed
     from led_sequences.rainbow import Rainbow
@@ -48,6 +51,10 @@ PROBABILITY_THRESHOLD = 0.99  # Confidence threshold
 DEBUG = True
 # -----------------------------------------
 
+"""
+    This class represents a voice activity detection system, which is trigged when the energy is above a certain given treshold.
+    This class is used to determine if the user is still speaking or not after the system as detected the wake word
+"""
 class VoiceActivityDetector:
     def __init__(self, frame_duration_ms=20, threshold=60, smoothing_factor=0.8):
         self.frame_duration_ms = frame_duration_ms
@@ -67,7 +74,7 @@ class VoiceActivityDetector:
             raise ValueError("Sample rate not set. Call set_sample_rate().")
 
         energy = np.mean(np.abs(frame))
-
+        
         self.smoothed_energy = (
             self.smoothing_factor * self.smoothed_energy
             + (1 - self.smoothing_factor) * energy
@@ -113,6 +120,11 @@ class VoiceActivityDetector:
         else:
             return True, [], None
 
+"""
+    The client class represent a client instance in a client-server comunication paradigm. The class acquires the input 
+    from the microphone, detect the wake word and send the conversation to the server. Then it waits for a response from it
+    before playing it to the user. 
+"""
 class Client:
     def __init__(self, server_ip, server_port, audio_params, model, labels):
         self.server_ip = server_ip

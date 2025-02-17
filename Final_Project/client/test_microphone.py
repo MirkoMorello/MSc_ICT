@@ -50,7 +50,6 @@ def record_and_save_amplified(duration=5, sample_rate=16000, channels=1, chunk_s
     audio_np *= amplification_factor
     print(f"Applied fixed amplification factor: {amplification_factor}")
 
-    # Optionally apply dynamic normalization
     if normalize:
         max_val = np.max(np.abs(audio_np))
         if max_val > 0:
@@ -81,5 +80,4 @@ def record_and_save_amplified(duration=5, sample_rate=16000, channels=1, chunk_s
     print("* Playback finished.")
 
 if __name__ == "__main__":
-    # Adjust the amplification_factor and normalize as needed.
     record_and_save_amplified(amplification_factor=50.0, normalize=True)
