@@ -14,6 +14,7 @@ build/
 develop-eggs/
 dist/
 **/datasets/
+**/checkpoints/
 downloads/
 eggs/
 .eggs/
