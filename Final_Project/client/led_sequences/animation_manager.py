@@ -59,7 +59,6 @@ class AnimationManager:
 
     def set_animation(self, new_animation, transition_duration=1.0):
         with self.lock:
-            # (Optionally, you could also decide to ignore new transitions if one is in progress.)
             self.next_animation = new_animation
             self.transition_duration = transition_duration
             self.transition_start = time.time()
