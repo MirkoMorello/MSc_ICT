@@ -400,11 +400,7 @@ if __name__ == "__main__":
         "channels": 1,
         "rate": 16000,
         "chunk_size": int(16000 * 0.5),  # 0.5 seconds
-<<<<<<< HEAD
         "threshold": 200,  # Start high, adjust
-=======
-        "threshold": 900,
->>>>>>> refs/remotes/origin/main
     }
 
     model = get_model(path = "../best_model.pth")
