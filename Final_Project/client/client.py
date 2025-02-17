@@ -40,26 +40,6 @@ if DEPLOYMENT_MODE == "prod":
 else:
     LED_AVAILABLE = False
 
-    # Define dummy classes with the same interface
-    class Fixed:
-        def __init__(self, *args, **kwargs):
-            pass
-        def start_sequence(self):
-            pass
-        def stop_sequence(self):
-            pass
-
-    class Rainbow:
-        def __init__(self, *args, **kwargs):
-            pass
-        def start_sequence(self):
-            pass
-        def stop_sequence(self):
-            pass
-
-    class Colors:
-        BLUE = None
-
 
 # --- Configuration ----------------------
 WAKE_WORD = "marvin"
@@ -362,6 +342,8 @@ class Client:
 
                 data = stream.read(self.audio_params["chunk_size"], exception_on_overflow=False)
                 audio_array = np.frombuffer(data, dtype=np.int16)
+                if DEPLOYMENT_MODE == 'prod':
+                    audio_array = audio_amplifier(audio_chunk = audio_array, factor = 15)
                 current_chunk = (torch.from_numpy(audio_array).unsqueeze(0).to(torch.float32) / 32768.0)
 
                 # --- Combine with Previous Chunk (if available) ---
@@ -417,7 +399,7 @@ if __name__ == "__main__":
         "channels": 1,
         "rate": 16000,
         "chunk_size": int(16000 * 0.5),  # 0.5 seconds
-        "threshold": 900,  # Start high, adjust
+        "threshold": 900,
     }
 
     model = get_model(path = "../best_model.pth")
