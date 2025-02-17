@@ -21,6 +21,12 @@ from pyannote.audio import Model as EmbeddingModel
 from pyannote.audio import Inference
 from pyannote.core import Segment
 
+# Re-segmentation
+try:
+    from pyannote.audio.pipelines.utils.resegmentation import Resegmentation
+except ImportError:
+    Resegmentation = None
+
 # Kokoro TTS imports
 sys.path.append(os.path.abspath("../datasets/Kokoro-82M"))
 from models import build_model
@@ -53,7 +59,7 @@ SERVER_PORT = 8080
 SAMPLE_RATE = 16000
 DEBUG = True
 MODEL_PATH = "../datasets/Kokoro-82M/kokoro-v0_19.pth"
-VOICE_PATH = "../datasets/Kokoro-82M/voices/af.pt"
+VOICE_PATH = "../datasets/Kokoro-82M/voices/am_adam.pt"
 VOICE_NAME = "af"
 
 HF_TOKEN = os.getenv("HF_AUTH_TOKEN", None)
@@ -87,27 +93,27 @@ conversation_stats_list: List[Dict[str, Any]] = []
 # Attempt to load pyannote diarization pipeline
 try:
     diarization_pipeline = Pipeline.from_pretrained(
-        "pyannote/speaker-diarization-3.1"
-        # If it is private and you do need auth, use: use_auth_token=HF_TOKEN
+        "pyannote/speaker-diarization-3.1",
+        use_auth_token=HF_TOKEN
     )
-    diarization_pipeline.postprocessors.params.onset.min_duration_on = 0.2
-    diarization_pipeline.postprocessors.params.offset.min_duration_off = 0.2
     logger.info("Diarization pipeline loaded successfully.")
 except Exception as e:
     logger.warning(f"Could not load pyannote/speaker-diarization-3.1: {e}")
     diarization_pipeline = None
 
+
 # Attempt to load embedding model
 try:
     embedding_model = EmbeddingModel.from_pretrained(
-        "pyannote/embedding"
-        # If private, you might need: use_auth_token=HF_TOKEN
+        "pyannote/embedding",
+        token = os.getenv("HF_AUTH_TOKEN", None)
     )
     logger.info("Embedding model loaded successfully.")
 except Exception as e:
     logger.warning(f"Could not load pyannote/embedding: {e}")
     embedding_model = None
 
+# Build the Inference object if embedding_model loaded
 if embedding_model is not None:
     embedding_inference = Inference(
         embedding_model,
@@ -116,6 +122,15 @@ if embedding_model is not None:
     )
 else:
     embedding_inference = None
+
+# Attempt to build a re-segmentation module (if installed)
+resegmenter = None
+if Resegmentation and embedding_model:
+    # This uses the same embedding_model for segmentation
+    resegmenter = Resegmentation(segmentation=embedding_model)
+    logger.info("Resegmentation module instantiated.")
+else:
+    logger.warning("Resegmentation module not available.")
 
 # =============================================================================
 # Conversation State and LLM Handler
@@ -154,7 +169,7 @@ class LLamaConversationHandler:
         ]
         messages.extend(self.conversation.context)
 
-        # Build prompt using tokenizer's chat template if available
+        # Build prompt
         if hasattr(self.tokenizer, "apply_chat_template"):
             prompt = self.tokenizer.apply_chat_template(
                 messages,
@@ -226,6 +241,7 @@ def load_speaker_database(json_path="speaker_embeddings.json"):
         return json.load(f)
 
 def speaker_id_from_embedding(embedding_vector: np.ndarray, speaker_db: dict, threshold=0.7) -> Tuple[str, float]:
+    """Map an embedding to a speaker ID from the database if similarity >= threshold."""
     if not speaker_db:
         return "Unknown", 0.0
 
@@ -258,13 +274,55 @@ def speaker_id_from_embedding(embedding_vector: np.ndarray, speaker_db: dict, th
             best_spk = spk_name
 
     logger.debug(f"[DEBUG] Best speaker = {best_spk}, similarity = {best_score:.4f}, threshold={threshold}")
-
     if best_score < threshold:
         logger.debug("→ Best score below threshold. Returning 'Unknown'.")
         return "Unknown", best_score
 
     logger.debug("→ Recognized speaker above threshold.")
     return best_spk, best_score
+
+# =============================================================================
+# Re-segmentation + Merge Short Segments
+# =============================================================================
+
+def resegment_with_embeddings(diari_result, wav_path):
+    """
+    If available, run embedding-based re-segmentation to refine diarization boundaries.
+    """
+    if resegmenter is None:
+        logger.debug("No resegmenter available. Skipping embedding-based re-segmentation.")
+        return diari_result
+    logger.debug("Performing embedding-based re-segmentation...")
+    return resegmenter(wav_path, diari_result)
+
+
+def merge_short_segments(segments, min_duration_merge=0.7):
+    """
+    Merge consecutive segments by the same speaker if a segment is shorter than `min_duration_merge`
+    or if there's a tiny gap between them.
+    """
+    if not segments:
+        return []
+
+    merged_segments = []
+    prev = segments[0]
+
+    for current in segments[1:]:
+        duration = current["end"] - current["start"]
+        # If same speaker + short segment => merge
+        if (current["speaker"] == prev["speaker"] and duration < min_duration_merge):
+            # Merge 'current' into 'prev'
+            prev["end"] = current["end"]
+            # Optionally, combine STT texts
+            prev["stt_text"] = prev["stt_text"].strip() + " " + current["stt_text"].strip()
+            # We can also average or max similarity. For simplicity:
+            prev["similarity"] = max(prev["similarity"], current["similarity"])
+        else:
+            merged_segments.append(prev)
+            prev = current
+    merged_segments.append(prev)
+
+    return merged_segments
 
 # =============================================================================
 # Diarization and STT Processing
@@ -313,43 +371,60 @@ def perform_diarization_stt(
         wf.writeframes(int16_data.tobytes())
 
     file_duration = len(audio_data) / sample_rate
+
+    # =======================
+    # 1) Initial Diarization
+    # =======================
     diag_start = time.perf_counter()
     diarization = diarization_pipeline(temp_wav)
     diag_elapsed = (time.perf_counter() - diag_start) * 1000
     logger.info(f"🔵 Diarization completed in {diag_elapsed:.2f} ms.")
 
-    for turn, _, _ in diarization.itertracks(yield_label=True):
+    # ==============================
+    # 2) Embedding-Based Re-Segmentation
+    # ==============================
+    diarization = resegment_with_embeddings(diarization, temp_wav)
+
+    # Build a list of (start, end, label)
+    raw_segments = []
+    for turn, _, label in diarization.itertracks(yield_label=True):
         start_time_seg = max(0.0, min(turn.start, file_duration))
         end_time_seg   = max(0.0, min(turn.end, file_duration))
-        if end_time_seg <= start_time_seg:
-            continue
-        segment = Segment(start_time_seg, end_time_seg)
+        if end_time_seg > start_time_seg:
+            raw_segments.append((start_time_seg, end_time_seg, label))
+
+    raw_segments.sort(key=lambda x: x[0])  # sort by start time
+
+    # =======================
+    # 3) Identify + STT each segment
+    # =======================
+    for (start_time_seg, end_time_seg, diar_label) in raw_segments:
         start_idx = int(start_time_seg * sample_rate)
         end_idx   = int(end_time_seg * sample_rate)
         segment_samples = audio_data[start_idx:end_idx]
-
         rms = np.sqrt(np.mean(segment_samples ** 2))
+
         if rms < 0.02:
             logger.debug(f"Segment energy too low ({rms:.4f}). Using 'Unknown' for speaker ID.")
             spk_id, similarity = "Unknown", 0.0
         else:
             with torch.no_grad():
-                segment_embedding = embedding_inference.crop(temp_wav, segment)
-            # Extract underlying data if the returned object has a 'data' attribute.
-            if hasattr(segment_embedding, "data"):
-                segment_embedding = segment_embedding.data
-            # Convert to a NumPy array if needed.
-            if isinstance(segment_embedding, torch.Tensor):
-                segment_embedding = segment_embedding.cpu().numpy()
-            spk_id, similarity = speaker_id_from_embedding(segment_embedding, speaker_db, threshold=0.3)
+                seg_embedding = embedding_inference.crop(temp_wav, Segment(start_time_seg, end_time_seg))
+            if hasattr(seg_embedding, "data"):
+                seg_embedding = seg_embedding.data
+            if isinstance(seg_embedding, torch.Tensor):
+                seg_embedding = seg_embedding.cpu().numpy()
 
+            spk_id, similarity = speaker_id_from_embedding(seg_embedding, speaker_db, threshold=0.25)
 
-
+        # Run STT on the segment
         stt_seg_start = time.perf_counter()
         stt_result = stt_pipeline({"raw": segment_samples, "sampling_rate": sample_rate}, chunk_length_s=30)
         stt_seg_elapsed = (time.perf_counter() - stt_seg_start) * 1000
         text = stt_result["text"]
+
         logger.info(f"🔵 [Segment STT] {spk_id} => {text} (Segment STT took {stt_seg_elapsed:.2f} ms)")
+
         segments_stats.append({
             "start": start_time_seg,
             "end": end_time_seg,
@@ -360,22 +435,24 @@ def perform_diarization_stt(
             "segment_stt_ms": stt_seg_elapsed
         })
 
-    final_text = "\n".join(f"{seg['speaker']} said: {seg['stt_text']}" for seg in segments_stats)
-    total_stt_characters = sum(len(seg["stt_text"]) for seg in segments_stats)
-    unique_speakers = list({seg["speaker"] for seg in segments_stats})
-    
-    # --- NEW: Aggregate similarity info per speaker (including 'Unknown') ---
+    # =================================
+    # 4) Merge or Relabel Short Segments
+    # =================================
+    merged_segments = merge_short_segments(segments_stats, min_duration_merge=0.7)
+
+    final_text = "\n".join(f"{seg['speaker']} said: {seg['stt_text']}" for seg in merged_segments)
+    total_stt_characters = sum(len(seg["stt_text"]) for seg in merged_segments)
+    unique_speakers = list({seg["speaker"] for seg in merged_segments})
+
+    # Compute average similarity per speaker
     speaker_similarities: Dict[str, List[float]] = {}
-    for seg in segments_stats:
-        # Record similarity for all segments, even if speaker is 'Unknown'
+    for seg in merged_segments:
         speaker_similarities.setdefault(seg["speaker"], []).append(seg["similarity"])
-    # Compute average similarity per speaker.
-    avg_speaker_similarities = {speaker: float(np.mean(sims)) for speaker, sims in speaker_similarities.items()}
-    # -------------------------------------------------------------------------
+    avg_speaker_similarities = {spk: float(np.mean(sims)) for spk, sims in speaker_similarities.items()}
 
     dia_stats = {
-        "segments": segments_stats,
-        "total_segments": len(segments_stats),
+        "segments": merged_segments,
+        "total_segments": len(merged_segments),
         "unique_speakers": unique_speakers,
         "total_stt_characters": total_stt_characters,
         "speaker_similarities": avg_speaker_similarities
@@ -408,7 +485,7 @@ class Server:
         )
 
         self.tts_model, self.voice = build_kokoro_tts()
-        # Adjust the path as needed.
+        # Load the speaker database
         self.speaker_db = load_speaker_database("../datasets/speaker_embeddings.json")
         logger.info("Server initialized.")
 
@@ -475,10 +552,9 @@ class Server:
                     if audio_data is None:
                         break  # Client disconnected
 
-                    # Record audio received size (in bytes)
                     audio_received_bytes = audio_data.nbytes
 
-                    # STT + Diarization with detailed stats
+                    # STT + Diarization + Re-seg + Merge
                     t_stt_start = time.perf_counter()
                     conversation_text, dia_stats = perform_diarization_stt(
                         audio_data,
@@ -489,25 +565,24 @@ class Server:
                     t_stt = (time.perf_counter() - t_stt_start) * 1000
                     logger.info(f"🔵 STT & Diarization completed in {t_stt:.2f} ms.")
 
-                    # Process through LLM
+                    # Pass the aggregated text to the LLM
                     t_llm_start = time.perf_counter()
                     logger.info("🟣 Interacting with LLM...")
                     response, probability = self.llm_handler.process_input(conversation_text)
                     t_llm = (time.perf_counter() - t_llm_start) * 1000
                     logger.info(f"🟣 LLM response (took {t_llm:.2f} ms):\n------------------\n{response}\n------------------")
-                    # Count tokens in response using the tokenizer.
+
                     token_count = len(self.llm_handler.tokenizer.encode(response))
 
-                    # Generate TTS audio from response (with phoneme info)
+                    # Generate TTS
                     t_tts_start = time.perf_counter()
                     audio_response, tts_phonemes = generate_tts(self.tts_model, self.voice, response)
                     t_tts = (time.perf_counter() - t_tts_start) * 1000
                     logger.info(f"🟠 TTS generation completed in {t_tts:.2f} ms.")
 
-                    # Determine next state based on LLM's probability
+                    # Decide next state (WAKEWORD / VAD)
                     next_state = "WAKEWORD" if probability > 0.5 else "VAD"
 
-                    # Compile conversation statistics into a dict
                     total_elapsed = (time.perf_counter() - total_loop_start) * 1000
                     conversation_stats = {
                         "timestamp": time.time(),
@@ -526,6 +601,7 @@ class Server:
 
                     self._send_response(audio_response, next_state)
                     logger.info(f"Total processing time for this cycle: {total_elapsed:.2f} ms.\n")
+
         except KeyboardInterrupt:
             logger.info("Stopping server due to keyboard interrupt...")
         finally:
@@ -534,7 +610,8 @@ class Server:
             if self.server_socket:
                 self.server_socket.close()
             logger.info("Server shut down.")
-            # Append the new conversation_stats_list to the existing JSON file.
+
+            # Save conversation stats
             stats_filename = "conversation_stats.json"
             existing_stats = []
             if os.path.exists(stats_filename):
@@ -543,7 +620,6 @@ class Server:
                         existing_stats = json.load(f)
                 except Exception as e:
                     logger.warning(f"Could not read existing stats file: {e}")
-            # Extend the existing stats with new ones.
             existing_stats.extend(conversation_stats_list)
             with open(stats_filename, "w") as f:
                 json.dump(existing_stats, f, indent=2, cls=NumpyEncoder)
