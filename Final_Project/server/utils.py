@@ -1,4 +1,3 @@
-# utils.py
 import os
 import json
 import logging
@@ -31,15 +30,9 @@ def extract_sliding_embedding_for_segment(
     end_time: float,
     inference_engine: Inference
 ) -> np.ndarray:
-    """
-    Use pyannote's sliding-window approach (skip_aggregation=True)
-    to extract multiple frames from [start_time, end_time], then average them.
-    Finally, L2-normalize. Returns a 1D np.array of shape (D,).
-    """
     with torch.no_grad():
         seg_embedding = inference_engine.crop(wav_path, Segment(start_time, end_time))
 
-    # If it's a SlidingWindowFeature, get .data
     if hasattr(seg_embedding, "data"):
         frames = seg_embedding.data  # shape (N, D)
     else:

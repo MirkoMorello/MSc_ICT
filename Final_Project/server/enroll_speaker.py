@@ -1,4 +1,3 @@
-# enroll.py
 import sys
 import os
 import logging
