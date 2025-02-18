@@ -59,7 +59,7 @@ SERVER_PORT = 8080
 SAMPLE_RATE = 16000
 DEBUG = True
 MODEL_PATH = "../datasets/Kokoro-82M/kokoro-v0_19.pth"
-VOICE_PATH = "../datasets/Kokoro-82M/voices/am_adam.pt"
+VOICE_PATH = "../datasets/Kokoro-82M/voices/af.pt"
 VOICE_NAME = "af"
 
 HF_TOKEN = os.getenv("HF_AUTH_TOKEN", None)
