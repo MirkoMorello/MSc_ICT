@@ -108,7 +108,7 @@ if embedding_model is not None:
         device=torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
         window="sliding",
         duration=1.5,
-        step=0.2
+        step=0.75
     )
 else:
     embedding_inference = None
@@ -432,12 +432,12 @@ class Server:
             while True:
                 self._accept_client()
                 while True:
-                    total_loop_start = time.perf_counter()
                     audio_data = self._receive_audio()
                     if audio_data is None:
                         break  # Client disconnected
 
                     audio_received_bytes = audio_data.nbytes
+                    processing_start = time.perf_counter()
 
                     # Diarization + STT processing
                     t_stt_start = time.perf_counter()
@@ -467,7 +467,7 @@ class Server:
                     # Decide next state (e.g., WAKEWORD vs VAD)
                     next_state = "WAKEWORD" if probability > 0.5 else "VAD"
 
-                    total_elapsed = (time.perf_counter() - total_loop_start) * 1000
+                    processing_elapsed = (time.perf_counter() - processing_start) * 1000
                     conversation_stats = {
                         "timestamp": time.time(),
                         "audio_received_bytes": audio_received_bytes,
@@ -477,14 +477,14 @@ class Server:
                         "llm_token_count": token_count,
                         "tts_ms": t_tts,
                         "tts_phonemes": tts_phonemes,
-                        "total_processing_ms": total_elapsed,
+                        "total_processing_ms": processing_elapsed,
                         "diarization": dia_stats
                     }
                     conversation_stats_list.append(conversation_stats)
                     logger.debug(f"Conversation stats: {json.dumps(conversation_stats, indent=2, cls=NumpyEncoder)}")
 
                     self._send_response(audio_response, next_state)
-                    logger.info(f"Total processing time for this cycle: {total_elapsed:.2f} ms.\n")
+                    logger.info(f"Total processing time for this cycle: {processing_elapsed:.2f} ms.\n")
 
         except KeyboardInterrupt:
             logger.info("Stopping server due to keyboard interrupt...")
@@ -508,6 +508,7 @@ class Server:
             with open(stats_filename, "w") as f:
                 json.dump(existing_stats, f, indent=2, cls=NumpyEncoder)
             logger.info(f"Conversation statistics appended to '{stats_filename}'.")
+
 
 
 if __name__ == "__main__":
