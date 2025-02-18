@@ -68,18 +68,10 @@ def speaker_id_from_embedding(
     speaker_db: dict,
     threshold=0.25
 ):
-    """
-    Compare a single embedding_vector to each stored speaker centroid.
-    Returns (best_speaker_name, best_score).
-    If best_score < threshold => returns ("Unknown", best_score).
-    """
     if not speaker_db:
         return "Unknown", 0.0
 
-    # If multi-d for some reason, average
-    if embedding_vector.ndim > 1:
-        embedding_vector = embedding_vector.mean(axis=0)
-
+    # Normalize the input embedding
     emb_norm = np.linalg.norm(embedding_vector)
     if emb_norm > 0:
         emb_vector = embedding_vector / emb_norm
@@ -89,16 +81,17 @@ def speaker_id_from_embedding(
     best_spk = "Unknown"
     best_score = -1.0
 
-    for spk_name, centroid_list in speaker_db.items():
-        centroid_arr = np.array(centroid_list, dtype=np.float32)
-        c_norm = np.linalg.norm(centroid_arr)
-        if c_norm > 0:
-            centroid_arr = centroid_arr / c_norm
+    for spk_name, centroids in speaker_db.items():
+        for centroid in centroids:
+            centroid_arr = np.array(centroid, dtype=np.float32)
+            c_norm = np.linalg.norm(centroid_arr)
+            if c_norm > 0:
+                centroid_arr /= c_norm
 
-        sim = float(np.dot(emb_vector, centroid_arr))
-        if sim > best_score:
-            best_score = sim
-            best_spk = spk_name
+            sim = float(np.dot(emb_vector, centroid_arr))
+            if sim > best_score:
+                best_score = sim
+                best_spk = spk_name
 
     if best_score < threshold:
         return "Unknown", best_score

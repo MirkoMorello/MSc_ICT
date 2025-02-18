@@ -89,8 +89,12 @@ def enroll_speaker(
     if c_norm > 0:
         centroid /= c_norm
 
-    # store in DB
-    spk_db[speaker_name] = centroid.tolist()
+    if speaker_name in spk_db:
+        spk_db[speaker_name].append(centroid.tolist())
+    else:
+        spk_db[speaker_name] = [centroid.tolist()]
+
+
     save_speaker_database(spk_db, db_path)
     logger.info(f"Speaker '{speaker_name}' enrolled successfully with {num_samples} samples.")
 
@@ -117,7 +121,7 @@ if __name__ == "__main__":
 
     embedding_inference = Inference(
         embedding_model,
-        skip_aggregation=True,    # we handle averaging ourselves
+        skip_aggregation=True, 
         window="sliding",
         duration=1.5,
         step=0.75,
@@ -130,6 +134,6 @@ if __name__ == "__main__":
         speaker_name=speaker_name,
         embedding_inference=embedding_inference,
         db_path=JSON_DB_PATH,
-        num_samples=3,
+        num_samples=10,
         record_seconds=3
     )
