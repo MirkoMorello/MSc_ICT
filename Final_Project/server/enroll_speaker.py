@@ -5,7 +5,7 @@ import logging
 import wave
 import numpy as np
 import pyaudio
-
+import torch
 from pyannote.audio import Model as EmbeddingModel
 from pyannote.audio import Inference
 
@@ -121,7 +121,8 @@ if __name__ == "__main__":
         window="sliding",
         duration=1.5,
         step=0.75,
-        device="cuda" if torch.cuda.is_available() else "cpu"
+        device=torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
     )
 
     # Now do the enrollment
