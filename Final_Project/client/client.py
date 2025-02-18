@@ -142,8 +142,6 @@ class Client:
         self.overlap_buffer = torch.tensor([], dtype=torch.float32)
         self.overlap_samples = int(self.audio_params["rate"] * 0.25)
         self.previous_chunk = None  # store the previous chunk
-        self.led_wake_word = Fixed(Colors.BLUE) 
-        self.led_waiting_wake_word = Rainbow()
 
     def _connect_to_server(self):
         try:
