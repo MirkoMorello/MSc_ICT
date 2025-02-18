@@ -5,7 +5,7 @@ import logging
 import wave
 import numpy as np
 import pyaudio
-
+import torch
 from pyannote.audio import Model as EmbeddingModel
 from pyannote.audio import Inference
 
