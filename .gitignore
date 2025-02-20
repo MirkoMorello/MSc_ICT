@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+**/conversation_stats.json
 
 # C extensions
 *.so
