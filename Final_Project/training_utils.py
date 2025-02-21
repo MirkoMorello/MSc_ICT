@@ -1,7 +1,6 @@
 import os
 import torch
 from tqdm import tqdm
-import json 
 
 
 def save_checkpoint(experiment_name, model, optimizer, scheduler, epoch, step, batch_idx,
@@ -28,11 +27,6 @@ def save_checkpoint(experiment_name, model, optimizer, scheduler, epoch, step, b
     torch.save(checkpoint, save_path)
     print(f"Checkpoint saved to {save_path}")
 
-    # Also dump the step history to JSON.
-    json_path = os.path.join(save_dir, "step_history.json")
-    with open(json_path, "w") as f:
-        json.dump(step_history, f, indent=4)
-    print(f"Step history saved to {json_path}")
 
 def load_checkpoint(experiment_name, model, optimizer, scheduler):
     checkpoint_dir = os.path.join("checkpoints", experiment_name)
@@ -61,20 +55,17 @@ def train_classification(
     checkpoint_frequency="epoch",  # Can be an integer (e.g., 100) or "epoch"
     resume=False
 ):
-    # Lists to store epoch-level metrics
     train_losses = []
     train_accuracies = []
     val_losses = []
     val_accuracies = []
-    # List to store per-step details
     step_history = []
     
     start_epoch = 0
     step = 0
     best_val_loss = float('inf')
-    resume_batch = 0  # For resuming within an epoch
+    resume_batch = 0
     
-    # If resuming, load checkpoint and history.
     if resume:
         state = load_checkpoint(experiment_name, model, optimizer, scheduler)
         if state:
@@ -181,11 +172,9 @@ def train_classification(
             val_losses.append(avg_val_loss)
             val_accuracies.append(avg_val_acc)
 
-            # Step scheduler if using one that depends on validation loss.
             if scheduler is not None:
                 scheduler.step(avg_val_loss)
             
-            # Save best model checkpoint if validation loss improves.
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 save_checkpoint(
@@ -195,7 +184,6 @@ def train_classification(
                 )
                 print(f"New best model saved with val loss: {best_val_loss:.4f} and val acc: {avg_val_acc:.2f}%")
             
-            # Save checkpoint at the end of the epoch if that's the selected frequency.
             if checkpoint_frequency == "epoch":
                 save_checkpoint(
                     experiment_name, model, optimizer, scheduler,
@@ -206,7 +194,6 @@ def train_classification(
             print(f'Epoch [{epoch+1}/{num_epochs}] Train Loss: {avg_train_loss:.4f} | Train Acc: {avg_train_acc:.2f}% | ' 
                   f'Val Loss: {avg_val_loss:.4f} | Val Acc: {avg_val_acc:.2f}%')
             
-            # After resuming, disable skipping.
             if resume and epoch == start_epoch:
                 resume = False
                 
@@ -251,21 +238,17 @@ def run_training_classification(
         num_workers=num_workers, pin_memory=True
     )
     
-    # Initialize optimizer and scheduler
     optimizer = optimizer_class(model.parameters(), **optimizer_params)
     scheduler = scheduler_class(optimizer, **scheduler_params) if scheduler_class is not None else None
     
-    # Optionally resume from a checkpoint.
     if resume_training:
         _ = load_checkpoint(experiment_name, model, optimizer, scheduler)
     
-    # Move model to device
     model.to(device)
     
     # Determine checkpoint frequency: if None, we use "epoch"
     freq = checkpoint_frequency if checkpoint_frequency is not None else "epoch"
     
-    # Run the training loop; note that our train_classification now returns step_history as well.
     train_losses, train_accuracies, val_losses, val_accuracies, step_history = train_classification(
         model,
         experiment_name,
