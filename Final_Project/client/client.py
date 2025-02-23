@@ -438,15 +438,4 @@ if __name__ == "__main__":
         model=model,
         labels=labels,
     )
-    client.run()   'nine', 'no', 'off', 'on', 'one', 'right', 'seven', 'sheila', 'six',
-        'stop', 'three', 'tree', 'two', 'up', 'visual', 'wow', 'yes', 'zero'
-    ]
-
-    client = Client(
-        server_ip=SERVER_ADDRESS,
-        server_port=SERVER_PORT,
-        audio_params=audio_params,
-        model=model,
-        labels=labels,
-    )
     client.run()
