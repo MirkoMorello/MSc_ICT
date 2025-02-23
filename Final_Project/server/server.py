@@ -20,7 +20,6 @@ from transformers import pipeline
 from pyannote.audio import Pipeline
 from pyannote.audio import Model as EmbeddingModel
 from pyannote.audio import Inference
-from pyannote.core import Segment
 
 # Re-segmentation
 try:
@@ -104,7 +103,7 @@ except Exception as e:
 if embedding_model is not None:
     embedding_inference = Inference(
         embedding_model,
-        skip_aggregation=True,  # We'll do manual aggregation via our utils
+        skip_aggregation=True,
         device=torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu"),
         window="sliding",
         duration=1.5,
@@ -132,7 +131,7 @@ def resegment_with_embeddings(diar_result, wav_path):
 
 def merge_short_segments(segments, min_duration_merge=0.7):
     """
-    Merge consecutive segments by the same speaker if a segment is shorter than `min_duration_merge`
+    Merge consecutive segments by the same speaker if a segment is shorter than min_duration_merge
     or if there's a tiny gap between them.
     """
     if not segments:
