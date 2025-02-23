@@ -7,6 +7,7 @@ __pycache__/
 # C extensions
 *.so
 *.wav
+!server_connected_msg.wav
 # Distribution / packaging
 **/.DS_Store
 .DS_Store

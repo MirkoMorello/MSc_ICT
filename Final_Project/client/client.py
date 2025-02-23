@@ -10,21 +10,18 @@ import threading
 import base64
 import json
 import queue
+import time
 from utils import get_model, audio_amplifier
 from dotenv import load_dotenv
 
 
-# TODO: add logs like in the server
-
+# Load environment variables
 load_dotenv()
 
 SERVER_ADDRESS = os.getenv("SERVER_ADDRESS", "localhost")
 SERVER_PORT = int(os.getenv("SERVER_PORT", 8080))
 DEPLOYMENT_MODE = os.getenv("DEPLOYMENT_MODE", "dev")
 
-"""
-    prod means that the code is being executed on the raspberry pi. 
-"""
 if DEPLOYMENT_MODE == "prod":
     from led_sequences.fixed import Fixed
     from led_sequences.rainbow import Rainbow
@@ -51,10 +48,6 @@ PROBABILITY_THRESHOLD = 0.99  # Confidence threshold
 DEBUG = True
 # -----------------------------------------
 
-"""
-    This class represents a voice activity detection system, which is trigged when the energy is above a certain given treshold.
-    This class is used to determine if the user is still speaking or not after the system as detected the wake word
-"""
 class VoiceActivityDetector:
     def __init__(self, frame_duration_ms=20, threshold=60, smoothing_factor=0.8):
         self.frame_duration_ms = frame_duration_ms
@@ -74,7 +67,7 @@ class VoiceActivityDetector:
             raise ValueError("Sample rate not set. Call set_sample_rate().")
 
         energy = np.mean(np.abs(frame))
-        
+
         self.smoothed_energy = (
             self.smoothing_factor * self.smoothed_energy
             + (1 - self.smoothing_factor) * energy
@@ -120,11 +113,6 @@ class VoiceActivityDetector:
         else:
             return True, [], None
 
-"""
-    The client class represent a client instance in a client-server comunication paradigm. The class acquires the input 
-    from the microphone, detect the wake word and send the conversation to the server. Then it waits for a response from it
-    before playing it to the user. 
-"""
 class Client:
     def __init__(self, server_ip, server_port, audio_params, model, labels):
         self.server_ip = server_ip
@@ -141,7 +129,9 @@ class Client:
         self.labels = labels
         self.overlap_buffer = torch.tensor([], dtype=torch.float32)
         self.overlap_samples = int(self.audio_params["rate"] * 0.25)
-        self.previous_chunk = None  # store the previous chunk 
+        self.previous_chunk = None  # Store the previous chunk
+        self.led_wake_word = Fixed(Colors.BLUE)
+        self.led_waiting_wake_word = Rainbow()
 
     def _connect_to_server(self):
         try:
@@ -153,6 +143,7 @@ class Client:
         except socket.error as e:
             print(f"Cannot connect: {e}")
             self.socket = None
+            raise e
         except Exception as e:
              print(f"Unexpected error: {e}")
              self.socket = None
@@ -231,7 +222,7 @@ class Client:
         if audio_data_normalized.ndim > 1:
             print("Warning: >1 dimension. Flattening.")
             audio_data_normalized = audio_data_normalized.flatten()
-        audio_data_int16 = (audio_data_normalized * 32767).astype(np.int16) 
+        audio_data_int16 = (audio_data_normalized * 32767).astype(np.int16)
         play_obj = sa.play_buffer(audio_data_int16, 1, 2, 24000)
         play_obj.wait_done()
 
@@ -355,16 +346,16 @@ class Client:
                 data = stream.read(self.audio_params["chunk_size"], exception_on_overflow=False)
                 audio_array = np.frombuffer(data, dtype=np.int16)
                 if DEPLOYMENT_MODE == 'prod':
-                    audio_array = audio_amplifier(audio_chunk = audio_array, factor = 15)
+                    audio_array = audio_amplifier(audio_chunk = audio_array, factor = 3) # We use a threshold of 5
                 current_chunk = (torch.from_numpy(audio_array).unsqueeze(0).to(torch.float32) / 32768.0)
 
-                # --- Combine with previous chunk  ---
+                # --- Combine with Previous Chunk (if available) ---
                 if self.previous_chunk is not None:
                     combined_input = torch.cat((self.previous_chunk, current_chunk), dim=1)
                 else:
                     combined_input = current_chunk  # First chunk, use only current
 
-				# --- Process combined chunk ---
+                                # --- Process combined chunk ---
                 if combined_input.size(1) >= self.audio_params["chunk_size"]:
                     predicted_index, probability = self._process_audio_chunk(combined_input)
                     predicted_label = self.labels[predicted_index]
@@ -379,21 +370,37 @@ class Client:
                 # --- Update previous_chunk ---
                 self.previous_chunk = current_chunk
 
+                # --- overlap buffer is not used in this logic ---
+
         finally:
             self._close_stream(stream)
-            self.previous_chunk = None  # reset for next loop
+            self.previous_chunk = None  # Reset for next loop
 
     def run(self):
         """Main client loop."""
-        self._connect_to_server()
+        is_connected = False
+        while not is_connected:
+            try:
+                self._connect_to_server()
+                is_connected = True
+            except socket.error as e:
+                is_connected = False
+                print("Connetion to server failed... trying again...")
+                time.sleep(1)
         if self.socket is None:
              return
+
+        with wave.open("server_connected_msg.wav", 'rb') as wf:
+            audio_data = wf.readframes(wf.getnframes())
+            audio_array = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32)
+            self._play_audio(audio_array)
+
         print("Client started. Listening...")
         try:
             while True:
                 self.wake_word_detected = False
                 self.overlap_buffer = torch.tensor([], dtype=torch.float32) #reset
-                self.previous_chunk = None  # also here
+                self.previous_chunk = None  # Reset previous_chunk
                 self._wake_word_detection_loop()
                 if self.wake_word_detected:
                     self._collect_audio_after_wake_word()
@@ -409,7 +416,7 @@ if __name__ == "__main__":
         "channels": 1,
         "rate": 16000,
         "chunk_size": int(16000 * 0.5),  # 0.5 seconds
-        "threshold": 200,  # Start high, adjust
+        "threshold": 900,  # Start high, adjust
     }
 
     model = get_model(path = "../best_model.pth")
@@ -421,6 +428,17 @@ if __name__ == "__main__":
         'backward', 'bed', 'bird', 'cat', 'dog', 'down', 'eight', 'five', 'follow',
         'forward', 'four', 'go', 'happy', 'house', 'learn', 'left', 'marvin',
         'nine', 'no', 'off', 'on', 'one', 'right', 'seven', 'sheila', 'six',
+        'stop', 'three', 'tree', 'two', 'up', 'visual', 'wow', 'yes', 'zero'
+    ]
+
+    client = Client(
+        server_ip=SERVER_ADDRESS,  #  your server's IP
+        server_port=SERVER_PORT,
+        audio_params=audio_params,
+        model=model,
+        labels=labels,
+    )
+    client.run()   'nine', 'no', 'off', 'on', 'one', 'right', 'seven', 'sheila', 'six',
         'stop', 'three', 'tree', 'two', 'up', 'visual', 'wow', 'yes', 'zero'
     ]
 
