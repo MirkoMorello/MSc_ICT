@@ -15,6 +15,7 @@ from utils import (
     extract_sliding_embedding_for_segment
 )
 
+
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
