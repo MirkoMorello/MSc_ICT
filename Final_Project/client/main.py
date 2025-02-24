@@ -1,7 +1,7 @@
 import pyaudio
 from .client import Client  # Use relative import: .client
 from .utils.audio_utils import get_model  # Use relative import: .utils.audio_utils
-from .config import (  # Use relative import: .config
+from .utils.config import (  # Use relative import: .config
     SERVER_ADDRESS, SERVER_PORT, AUDIO_FORMAT, AUDIO_CHANNELS, AUDIO_RATE,
     AUDIO_CHUNK_SIZE, VAD_THRESHOLD, MODEL_PATH, LABELS
 )

@@ -1,6 +1,6 @@
 # client/utils/logging_utils.py
 import logging
-from client.config import LOGGING_LEVEL
+from .config import LOGGING_LEVEL
 
 def get_logger(name):
     """Initializes a logger with pre-set formatting."""
