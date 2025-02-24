@@ -130,10 +130,10 @@ class Client:
             self.socket.settimeout(None)
 
     # client/client.py (or wherever _play_audio is defined)
-    def _play_audio(self, audio_data):
+    def _play_audio(self, audio_data, sample_rate=24000):
         try:
             # Directly play the int16 data without extra normalization:
-            play_obj = sa.play_buffer(audio_data, num_channels=1, bytes_per_sample=2, sample_rate=24000)
+            play_obj = sa.play_buffer(audio_data, num_channels=1, bytes_per_sample=2, sample_rate=sample_rate)
             play_obj.wait_done()
             logger.debug("Audio played without extra normalization.")
         except Exception as e:
@@ -317,8 +317,8 @@ class Client:
 
         with wave.open("./client/utils/server_connected_msg.wav", 'rb') as wf:
             audio_data = wf.readframes(wf.getnframes())
-            audio_array = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32)
-            self._play_audio(audio_array)
+            audio_array = np.frombuffer(audio_data, dtype=np.int16).astype(np.int16)
+            self._play_audio(audio_array, sample_rate=24000)
 
         logger.info("Client started. Listening...")
         try:
