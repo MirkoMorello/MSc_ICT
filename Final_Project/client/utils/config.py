@@ -31,3 +31,5 @@ LABELS = [
     'nine', 'no', 'off', 'on', 'one', 'right', 'seven', 'sheila', 'six',
     'stop', 'three', 'tree', 'two', 'up', 'visual', 'wow', 'yes', 'zero'
 ]
+MIN_SILENT_FRAMES_SILENT = 10
+MIN_SILENT_FRAMES_VOICED = 4

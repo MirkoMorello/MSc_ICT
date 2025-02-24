@@ -2,7 +2,7 @@
 import numpy as np
 import logging
 from . import logging_utils
-from .config import DEPLOYMENT_MODE, AMPLIFICATION_FACTOR_VAD
+from .config import MIN_SILENT_FRAMES_SILENT, MIN_SILENT_FRAMES_VOICED
 from .audio_utils import audio_amplifier
 from .led_utils import set_led_animation, LED_AVAILABLE, is_led_animation
 
@@ -47,9 +47,9 @@ class VoiceActivityDetector:
 
         # Decide when speech ended:
         if self.voiced_frames_detected:
-            is_speech_ended = self.num_silent_frames >= 7
+            is_speech_ended = self.num_silent_frames >= MIN_SILENT_FRAMES_VOICED
         else:
-            is_speech_ended = self.num_silent_frames >= 18
+            is_speech_ended = self.num_silent_frames >= MIN_SILENT_FRAMES_SILENT
 
         if is_speech_ended:
             logger.info("Speech ended detected by VAD")
