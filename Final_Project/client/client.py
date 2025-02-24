@@ -78,7 +78,6 @@ class VoiceActivityDetector:
             self.voiced_frames_detected = True
             if LED_AVAILABLE:
                 if not isinstance(anim_manager.effective_animation(), Rainbow):
-                    print("Changing animation to rainbow")
                     anim_manager.set_animation(rainbow, transition_duration=0.2)
 
 
@@ -266,7 +265,7 @@ class Client:
                     data = stream.read(self.audio_params["chunk_size"], exception_on_overflow=False)
                     audio_chunk = np.frombuffer(data, dtype=np.int16)
                     if DEPLOYMENT_MODE == 'prod':
-                        audio_chunk = audio_amplifier(audio_chunk)
+                        audio_chunk = audio_amplifier(audio_chunk, factor = os.getenv("AMPLIFICATION_FACTOR_VAD", 1)) # We use a threshold of 5
                     speech_continue, audio_frames, had_voiced = self.vad.process_audio_frame(audio_chunk)
 
                     if audio_frames:
@@ -340,13 +339,10 @@ class Client:
                 if LED_AVAILABLE:
                     if not isinstance(anim_manager.next_animation, Fixed):
                         if not isinstance(anim_manager.current_animation, Fixed):
-                            print("Changing animation to rainbow")
                             anim_manager.set_animation(fixed, transition_duration=0.2)
 
                 data = stream.read(self.audio_params["chunk_size"], exception_on_overflow=False)
-                audio_array = np.frombuffer(data, dtype=np.int16)
-                if DEPLOYMENT_MODE == 'prod':
-                    audio_array = audio_amplifier(audio_chunk = audio_array, factor = 3) # We use a threshold of 5
+                audio_array = audio_amplifier(np.frombuffer(data, dtype=np.int16), factor=os.getenv("AMPLIFICATION_FACTOR_WAKE_WORD", 1))
                 current_chunk = (torch.from_numpy(audio_array).unsqueeze(0).to(torch.float32) / 32768.0)
 
                 # --- Combine with Previous Chunk (if available) ---
@@ -416,7 +412,7 @@ if __name__ == "__main__":
         "channels": 1,
         "rate": 16000,
         "chunk_size": int(16000 * 0.5),  # 0.5 seconds
-        "threshold": 900,  # Start high, adjust
+        "threshold": os.getenv("VAD_THRESHOLD", 300)
     }
 
     model = get_model(path = "../best_model.pth")
