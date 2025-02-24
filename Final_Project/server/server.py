@@ -116,6 +116,7 @@ class Server:
         except Exception as e:
             logger.exception(f"Error sending response: {e}")
 
+    # server/main_server.py (or similar)
     def run(self):
         self._start_server()
         try:
@@ -126,66 +127,41 @@ class Server:
                     if audio_data is None:
                         break  # Client disconnected
 
-                    audio_received_bytes = audio_data.nbytes if audio_data is not None else 0
+                    # Start processing timer immediately after audio is received
                     processing_start = time.perf_counter()
 
                     # 1. Diarization and STT
-                    t_stt_start = time.perf_counter()
                     conversation_text, dia_stats = self.audio_processor.perform_diarization_stt(
                         audio_data, SAMPLE_RATE
                     )
-                    t_stt = (time.perf_counter() - t_stt_start) * 1000
-                    logger.info(f"🔵 Diarization + STT completed in {t_stt:.2f} ms.")
+                    t_stt = (time.perf_counter() - processing_start) * 1000
+                    logger.info(f"Diarization+STT: {t_stt:.2f} ms")
 
-                    # 2. LLM
+                    # 2. LLM processing
                     t_llm_start = time.perf_counter()
                     response, probability = self.llm_handler.process_input(conversation_text)
                     t_llm = (time.perf_counter() - t_llm_start) * 1000
-                    logger.info(f"🟣 LLM response (took {t_llm:.2f} ms):\n{response}")
+                    logger.info(f"LLM processing: {t_llm:.2f} ms")
 
-                    # Corrected line to check for tokenizer existence before accessing
-                    token_count = len(self.llm_handler.tokenizer.encode(response)) if hasattr(self.llm_handler, 'tokenizer') and self.llm_handler.tokenizer is not None else 0
-
-
-                    # 3. TTS
+                    # 3. TTS processing
                     t_tts_start = time.perf_counter()
                     audio_response, tts_meta = self.tts_handler.generate_tts(response)
                     t_tts = (time.perf_counter() - t_tts_start) * 1000
-                    logger.info(f"🟠 TTS generation completed in {t_tts:.2f} ms.")
+                    logger.info(f"TTS generation: {t_tts:.2f} ms")
 
-                    # 4. Decide next state
+                    # 4. Decide next state and send response
                     next_state = "WAKEWORD" if probability > 0.5 else "VAD"
-
-                    # 5. Send Response
                     self._send_response(audio_response, next_state)
-                    processing_elapsed = (time.perf_counter() - processing_start) * 1000
 
-                    # Create conversation stats
-                    conversation_stats = {
-                        "timestamp": time.time(),
-                        "audio_received_bytes": audio_received_bytes,
-                        "stt_diarization_ms": t_stt,
-                        "stt_characters": len(conversation_text),
-                        "llm_ms": t_llm,
-                        "llm_token_count": token_count,
-                        "tts_ms": t_tts,
-                        "tts_phonemes": tts_meta,
-                        "total_processing_ms": processing_elapsed,
-                        "diarization": dia_stats
-                    }
-                    self.conversation_stats_list.append(conversation_stats)
-                    logger.debug(
-                        "Conversation stats:\n" +
-                        json.dumps(conversation_stats, indent=2, cls=NumpyEncoder)
-                    )
-                    logger.info(f"Total processing time: {processing_elapsed:.2f} ms.\n")
-
-
+                    total_processing = (time.perf_counter() - processing_start) * 1000
+                    logger.info(f"Total processing time (audio receipt to response): {total_processing:.2f} ms")
+                # End inner client loop
         except KeyboardInterrupt:
             logger.info("Stopping server (KeyboardInterrupt).")
         finally:
             self.shutdown()
             self.save_stats()
+
 
 
     def shutdown(self):
