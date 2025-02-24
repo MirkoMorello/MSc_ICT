@@ -14,10 +14,9 @@ import time
 import logging
 from .utils.vad import VoiceActivityDetector
 from .utils.audio_utils import get_model, audio_amplifier
-from .config import (
-    SERVER_ADDRESS, SERVER_PORT, AUDIO_FORMAT, AUDIO_CHANNELS, AUDIO_RATE,
-    AUDIO_CHUNK_SIZE, VAD_THRESHOLD, WAKE_WORD, PROBABILITY_THRESHOLD,
-    DEPLOYMENT_MODE, AMPLIFICATION_FACTOR_WAKE_WORD, MODEL_PATH, LABELS
+from .utils.config import (
+    WAKE_WORD, PROBABILITY_THRESHOLD, DEPLOYMENT_MODE,
+    AMPLIFICATION_FACTOR_WAKE_WORD, AMPLIFICATION_FACTOR_VAD
 )
 from .utils.led_utils import set_led_animation, LED_AVAILABLE, is_led_animation, get_current_led_animation
 from .utils import logging_utils  # Corrected import
@@ -111,7 +110,7 @@ class Client:
             response_json = json.loads(response_data.decode())
             audio_base64 = response_json["audio"]
             if audio_base64:
-                audio_data = np.frombuffer(base64.b64decode(audio_base64), dtype=np.float32)
+                audio_data = np.frombuffer(base64.b64decode(audio_base64), dtype=np.int16)
             else:
                 audio_data = None
             next_state = response_json["next_state"]
@@ -130,21 +129,16 @@ class Client:
         finally:
             self.socket.settimeout(None)
 
+    # client/client.py (or wherever _play_audio is defined)
     def _play_audio(self, audio_data):
         try:
-            audio_data_normalized = (
-                audio_data / np.max(np.abs(audio_data))
-                if np.max(np.abs(audio_data)) > 0
-                else audio_data
-            )
-            if audio_data_normalized.ndim > 1:
-                logger.warning(">1 dimension. Flattening.")
-                audio_data_normalized = audio_data_normalized.flatten()
-            audio_data_int16 = (audio_data_normalized * 32767).astype(np.int16)
-            play_obj = sa.play_buffer(audio_data_int16, 1, 2, 24000)  # Use 24000 consistently
+            # Directly play the int16 data without extra normalization:
+            play_obj = sa.play_buffer(audio_data, num_channels=1, bytes_per_sample=2, sample_rate=24000)
             play_obj.wait_done()
+            logger.debug("Audio played without extra normalization.")
         except Exception as e:
             logger.exception(f"Error playing audio: {e}")
+
 
     def _save_audio_to_file(self, frames, filename="user_speech.wav"):
         try:

@@ -2,7 +2,7 @@
 import os
 import logging
 from . import logging_utils
-from ..config import DEPLOYMENT_MODE
+from .config import DEPLOYMENT_MODE
 
 logger = logging_utils.get_logger(__name__)
 
