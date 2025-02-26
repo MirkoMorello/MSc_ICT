@@ -49,6 +49,7 @@ class Client:
             self.socket.connect((self.server_ip, self.server_port))
             self.socket.settimeout(None)
             logger.info("Connected to server.")
+            logger.info(f"DEPLOYMENT_MODE: {DEPLOYMENT_MODE}")
         except socket.error as e:
             logger.error(f"Cannot connect: {e}")
             self.socket = None
