@@ -9,13 +9,14 @@ logger = logging_utils.get_logger(__name__)
 LED_AVAILABLE = False
 
 if DEPLOYMENT_MODE == "prod":
+    logger.info(f"Current DEPLOYMENT_MODE: {DEPLOYMENT_MODE}")
     try:
         from ...led_sequences.fixed import Fixed
         from ...led_sequences.rainbow import Rainbow
         from ...led_sequences.colors import Colors
         from ...led_sequences.animation_manager import AnimationManager
         from ...led_sequences.pulse import Pulse
-
+        logger.info("LED libraries imported successfully")
         rainbow = Rainbow(brightness=0.7)
         loading = Pulse(color=Colors.BLUE, brightness=0.7)  # Use Pulse for loading
         pulse_waiting = Pulse(color=Colors.BLUE, brightness=0.7)
