@@ -8,6 +8,7 @@ logger = logging_utils.get_logger(__name__)
 
 LED_AVAILABLE = False
 
+logger.info(f"DEPLOYMENT_MODE: {DEPLOYMENT_MODE}")
 if DEPLOYMENT_MODE == "prod":
     try:
         from ..led_sequences.fixed import Fixed
