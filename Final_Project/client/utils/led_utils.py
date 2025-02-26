@@ -10,22 +10,27 @@ LED_AVAILABLE = False
 
 if DEPLOYMENT_MODE == "prod":
     logger.info(f"Current DEPLOYMENT_MODE: {DEPLOYMENT_MODE}")
+    logger.info(f"Current file location: {__file__}")
     try:
-        from ...led_sequences.fixed import Fixed
-        from ...led_sequences.rainbow import Rainbow
-        from ...led_sequences.colors import Colors
-        from ...led_sequences.animation_manager import AnimationManager
-        from ...led_sequences.pulse import Pulse
+        # Prova con percorso relativo dal client
+        from ..led_sequences.fixed import Fixed
+        from ..led_sequences.rainbow import Rainbow
+        from ..led_sequences.colors import Colors
+        from ..led_sequences.animation_manager import AnimationManager
+        from ..led_sequences.pulse import Pulse
+        
         logger.info("LED libraries imported successfully")
         rainbow = Rainbow(brightness=0.7)
-        loading = Pulse(color=Colors.BLUE, brightness=0.7)  # Use Pulse for loading
+        loading = Pulse(color=Colors.BLUE, brightness=0.7)
         pulse_waiting = Pulse(color=Colors.BLUE, brightness=0.7)
         pulse_speaking = Pulse(color=Colors.WHITE, brightness=0.7)
         fixed = Fixed(color=Colors.BLACK, brightness=0.5)
-        anim_manager = AnimationManager(fixed)  # Initialize with 'fixed'
+        anim_manager = AnimationManager(fixed)
         LED_AVAILABLE = True
+        logger.info("LED sequences initialized successfully")
     except ImportError as e:
-        logger.warning(f"LED libraries not available: {e}.  LED control disabled.")
+        logger.warning(f"LED libraries not available: {e}")
+        logger.warning(f"Python path: {os.sys.path}")
         LED_AVAILABLE = False
     except Exception as e:
         logger.error(f"Error initializing LED sequences: {e}")
