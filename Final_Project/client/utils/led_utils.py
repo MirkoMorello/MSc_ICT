@@ -13,11 +13,11 @@ if DEPLOYMENT_MODE == "prod":
     logger.info(f"Current file location: {__file__}")
     try:
         # Prova con percorso relativo dal client
-        from ..led_sequences.fixed import Fixed
-        from ..led_sequences.rainbow import Rainbow
-        from ..led_sequences.colors import Colors
-        from ..led_sequences.animation_manager import AnimationManager
-        from ..led_sequences.pulse import Pulse
+        from client.led_sequences.fixed import Fixed
+        from client.led_sequences.rainbow import Rainbow
+        from client.led_sequences.colors import Colors
+        from client.led_sequences.animation_manager import AnimationManager
+        from client.led_sequences.pulse import Pulse
         
         logger.info("LED libraries imported successfully")
         rainbow = Rainbow(brightness=0.7)
