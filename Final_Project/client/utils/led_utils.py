@@ -10,11 +10,11 @@ LED_AVAILABLE = False
 
 if DEPLOYMENT_MODE == "prod":
     try:
-        from ..led_sequences.fixed import Fixed
-        from ..led_sequences.rainbow import Rainbow
-        from ..led_sequences.colors import Colors
-        from ..led_sequences.animation_manager import AnimationManager
-        from ..led_sequences.pulse import Pulse
+        from ...led_sequences.fixed import Fixed
+        from ...led_sequences.rainbow import Rainbow
+        from ...led_sequences.colors import Colors
+        from ...led_sequences.animation_manager import AnimationManager
+        from ...led_sequences.pulse import Pulse
 
         rainbow = Rainbow(brightness=0.7)
         loading = Pulse(color=Colors.BLUE, brightness=0.7)  # Use Pulse for loading
