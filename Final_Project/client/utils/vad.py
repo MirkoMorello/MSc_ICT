@@ -38,10 +38,13 @@ class VoiceActivityDetector:
             self.num_silent_frames = 0
             self.voiced_frames_detected = True
             logger.debug("Voiced frame detected")
-            # e.g., update LED animation here if needed
+            if LED_AVAILABLE and not is_led_animation("rainbow"):
+                set_led_animation("rainbow", transition_duration=0.2)
         else:
             self.num_silent_frames += 1
             logger.debug(f"Silent frame count: {self.num_silent_frames}")
+            if LED_AVAILABLE and not is_led_animation("loading"):
+                set_led_animation("loading", transition_duration=0.2)
 
         self.audio_buffer.append(frame)
 

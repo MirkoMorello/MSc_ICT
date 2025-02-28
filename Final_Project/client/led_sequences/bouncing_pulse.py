@@ -1,4 +1,4 @@
-from led_sequences.base_sequence import BaseSequence
+from .base_sequence import BaseSequence
 import time
 import math
 

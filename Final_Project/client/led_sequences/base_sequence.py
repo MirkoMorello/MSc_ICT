@@ -1,4 +1,4 @@
-from config import (
+from ..utils.config import (
     START_FRAME, 
     END_FRAME, 
     LED_COUNT

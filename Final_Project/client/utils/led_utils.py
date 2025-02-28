@@ -12,16 +12,16 @@ if DEPLOYMENT_MODE == "prod":
     logger.info(f"Current DEPLOYMENT_MODE: {DEPLOYMENT_MODE}")
     logger.info(f"Current file location: {__file__}")
     try:
-        # Prova con percorso relativo dal client
-        from client.led_sequences.fixed import Fixed
-        from client.led_sequences.rainbow import Rainbow
-        from client.led_sequences.colors import Colors
-        from client.led_sequences.animation_manager import AnimationManager
-        from client.led_sequences.pulse import Pulse
+        from ..led_sequences.fixed import Fixed
+        from ..led_sequences.rainbow import Rainbow
+        from ..led_sequences.colors import Colors
+        from ..led_sequences.animation_manager import AnimationManager
+        from ..led_sequences.pulse import Pulse
+        from ..led_sequences.loading import Loading
         
         logger.info("LED libraries imported successfully")
         rainbow = Rainbow(brightness=0.7)
-        loading = Pulse(color=Colors.BLUE, brightness=0.7)
+        loading = Loading(color=Colors.BLUE, brightness=0.7, duration=4)
         pulse_waiting = Pulse(color=Colors.BLUE, brightness=0.7)
         pulse_speaking = Pulse(color=Colors.WHITE, brightness=0.7)
         fixed = Fixed(color=Colors.BLACK, brightness=0.5)
@@ -78,7 +78,7 @@ def is_led_animation(animation_name):
         if animation_name == "rainbow":
             return isinstance(current_animation, Rainbow)
         elif animation_name == "loading":
-            return isinstance(current_animation, Pulse)  # Both loading and waiting are Pulse
+            return isinstance(current_animation, Loading)  # Both loading and waiting are Pulse
         elif animation_name == "pulse_waiting":
             return isinstance(current_animation, Pulse) and current_animation.color == Colors.BLUE
         elif animation_name == "pulse_speaking":
