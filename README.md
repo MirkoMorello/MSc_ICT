@@ -12,6 +12,10 @@ Università Degli Studi di Milano-Bicocca
 
 </div>
 
+<p align="center">
+  <img src="docs/assets/portfolio-card.png" alt="Marvin voice assistant portfolio card" width="100%">
+</p>
+
 ---
 
 ## 📋 Table of Contents
@@ -39,13 +43,13 @@ Università Degli Studi di Milano-Bicocca
 
 ## 🎯 Overview
 
-**Marvin** is an AI-based virtual assistant designed as a consumer technology product, built from scratch using state-of-the-art machine learning models. The project demonstrates a complete end-to-end conversational AI system with custom hardware integration, featuring:
+**Marvin** is an AI-based virtual assistant prototype designed as a consumer technology product, built from scratch using modern speech and language models. The project demonstrates a complete end-to-end conversational AI system with custom hardware integration, featuring:
 
-- **Privacy-First Design**: Wake word detection runs entirely on-device
+- **Partial Privacy-First Design**: Wake word detection runs on-device before audio is sent to the server pipeline
 - **Multi-Speaker Support**: Real-time speaker identification and diarization
-- **Natural Conversations**: Context-aware responses using LLama 8B
+- **Natural Conversations**: Context-aware responses using Llama 8B
 - **Physical Device**: Custom 3D-printed enclosure with Raspberry Pi hardware
-- **Low Latency**: Optimized pipeline for responsive interactions
+- **Interactive Prototype**: Optimized enough for live demos, with room for lower-latency production serving
 
 ### Project Goals
 
@@ -56,7 +60,7 @@ Università Degli Studi di Milano-Bicocca
    - Speech-to-text transcription
    - LLM-based intelligent responses
    - Text-to-speech synthesis
-4. Support real-time multiple client connections with minimal latency
+4. Support a responsive single-device prototype and document the path toward parallel multi-client serving
 
 ---
 
@@ -87,7 +91,7 @@ Università Degli Studi di Milano-Bicocca
 │  │ 2. Speaker Diarization (pyannote 3.1)                          │ │
 │  │ 3. Speaker Identification (embedding-based)                    │ │
 │  │ 4. Speech-to-Text (Whisper Large v3 Turbo)                     │ │
-│  │ 5. LLM Processing (LLama 8B Instruct)                          │ │
+│  │ 5. LLM Processing (Llama 8B Instruct)                          │ │
 │  │ 6. Text-to-Speech (Kokoro TTS)                                 │ │
 │  │ 7. Response Transmission                                       │ │
 │  └────────────────────────────────────────────────────────────────┘ │
@@ -236,7 +240,7 @@ Response Transmission
 
 **1. Server Core (`Final_Project/server/server.py`)**
 - Manages TCP socket connections
-- Handles multiple clients sequentially
+- Handles client sessions sequentially in the current prototype
 - Coordinates pipeline execution
 - Sends responses with state information
 
@@ -252,7 +256,7 @@ Response Transmission
 - Threshold-based speaker matching
 
 **4. LLM Handler (`Final_Project/server/utils/llm_handler.py`)**
-- Loads LLama 8B Instruct model
+- Loads Llama 8B Instruct model
 - Custom prompt engineering for home assistant context
 - Generates concise, context-aware responses
 
@@ -282,7 +286,7 @@ Response Transmission
 - **Contextual understanding**: LLM receives full conversation context with speaker labels
 
 ### 3. Natural Language Understanding
-- **LLama 8B model**: 8 billion parameters with quantization
+- **Llama 8B model**: 8 billion parameters loaded with `bfloat16` weights in the current server code
 - **Custom system prompt**: Optimized for home assistant behavior
 - **Context-aware**: Understands multi-turn conversations
 
@@ -424,9 +428,9 @@ Output: Class predictions
 
 ### Large Language Model (LLM)
 
-**Model**: Meta-LLama-3-8B-Instruct
+**Model**: Meta-Llama-3-8B-Instruct
 - **Parameters**: 8 billion
-- **Quantization**: Hybrid quantization for memory efficiency
+- **Memory mode**: `bfloat16` model loading for memory efficiency
 - **VRAM usage**: 6-8GB
 - **Context window**: Handles full conversation history
 
@@ -506,6 +510,7 @@ source venv/bin/activate
 
 3. **Install dependencies:**
 ```bash
+cd Final_Project
 pip install -r requirements.txt
 ```
 
@@ -561,6 +566,7 @@ sudo apt-get install libatlas-base-dev  # For NumPy
 
 3. **Install Python dependencies:**
 ```bash
+cd Final_Project
 pip3 install -r requirements.txt
 ```
 
@@ -767,7 +773,7 @@ Say goodbye phrases to end:
 ### Models & Frameworks
 
 - **Whisper Large v3 Turbo**: [OpenAI Whisper](https://github.com/openai/whisper)
-- **LLama 3 8B**: [Meta LLama](https://ai.meta.com/llama/)
+- **Llama 3 8B**: [Meta Llama](https://ai.meta.com/llama/)
 - **Pyannote Diarization**: [pyannote.audio](https://github.com/pyannote/pyannote-audio)
 - **Kokoro TTS**: Speech synthesis engine
 - **MatchboxNet**: [NVIDIA NeMo](https://arxiv.org/abs/2004.08531)
