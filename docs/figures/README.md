@@ -26,6 +26,8 @@ cp "$figure_tmp/architecture.png" docs/figures/architecture.png
 ImageMagick may require a locally installed font even without labels;
 on macOS add `-font /System/Library/Fonts/Helvetica.ttc` after `montage`.
 
-Keep these filenames stable: the repository's main README references them
-directly. After regenerating, inspect all three PNGs at full size and in
+Keep these filenames stable. The main README pins the raw image URLs to
+the image commit because GitHub's branch-image cache continued serving the
+old crops even with a query parameter. When regenerating, commit the images
+first and update those URLs to the new image commit. Inspect all PNGs at full size and in
 the rendered README to ensure no device parts, labels or arrows are cut off.

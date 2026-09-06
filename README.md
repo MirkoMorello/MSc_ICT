@@ -15,7 +15,7 @@ Final project for the **Artificial Intelligence for Science and
 Technology** course, MSc in Artificial Intelligence (University of
 Milano-Bicocca, A.Y. 2024/2025), with Andrea Yachaya.
 
-<p align="center"><img src="docs/figures/hardware_renders.png?v=08106b4" width="820"
+<p align="center"><img src="https://raw.githubusercontent.com/MirkoMorello/MSc_ICT/08106b44cd7ec72cc5c5b68e976817fa2d4a7165/docs/figures/hardware_renders.png" width="820"
 alt="CAD renders of the Marvin device"></p>
 <p align="center"><em>The 3D-printed client: hexagonal microphone array on
 top, Raspberry Pi and audio/battery boards stacked below. CAD renders from
@@ -23,7 +23,7 @@ the project presentation.</em></p>
 
 ## Architecture
 
-<p align="center"><img src="docs/figures/architecture.png?v=08106b4" width="820"
+<p align="center"><img src="https://raw.githubusercontent.com/MirkoMorello/MSc_ICT/08106b44cd7ec72cc5c5b68e976817fa2d4a7165/docs/figures/architecture.png" width="820"
 alt="Client/server data flow"></p>
 <p align="center"><em>Data flow: the client captures audio on wake word and
 sends it to the server, which runs diarization, STT, LLM inference and TTS,
@@ -39,7 +39,7 @@ then returns audio for playback. Source: project presentation.</em></p>
 
 ## Hardware
 
-<p align="center"><img src="docs/figures/hardware_exploded.png?v=08106b4" width="820"
+<p align="center"><img src="https://raw.githubusercontent.com/MirkoMorello/MSc_ICT/08106b44cd7ec72cc5c5b68e976817fa2d4a7165/docs/figures/hardware_exploded.png" width="820"
 alt="Exploded CAD drawing of the device with labelled components"></p>
 <p align="center"><em>Labelled assembly: Raspberry Pi 3 Model B+, 3300 mAh
 lithium battery with charger, 5 V regulator, 2×5 W speaker amplifier, MEMS
